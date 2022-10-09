@@ -1,0 +1,8 @@
+{
+    "server":"85.10.139.67",
+    "server_port":7801,
+    "password":"pass",
+    "timeout":300,
+    "method":"aes-256-gcm",
+    "fast_open": false
+}
