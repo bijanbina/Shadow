@@ -13,52 +13,24 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <math.h>
-#ifndef __MINGW32__
 #include <netdb.h>
 #include <errno.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <sys/un.h>
-#endif
 #include <libcork/core.h>
-
-#if defined(HAVE_SYS_IOCTL_H) && defined(HAVE_NET_IF_H) && defined(__linux__)
-#include <net/if.h>
-#include <sys/ioctl.h>
-#define SET_INTERFACE
-#endif
 
 #include "netutils.h"
 #include "utils.h"
 #include "acl.h"
-#include "plugin.h"
-#include "server.h"
-#include "winsock.h"
+#include "plugin.h" 
+#include "server.h" 
+#include "winsock.h" 
 #include "resolv.h"
-
-#ifndef EAGAIN
-#define EAGAIN EWOULDBLOCK
-#endif
-
-#ifndef EWOULDBLOCK
-#define EWOULDBLOCK EAGAIN
-#endif
 
 #ifndef SSMAXCONN
 #define SSMAXCONN 1024
-#endif
-
-#ifdef USE_NFCONNTRACK_TOS
-
-#ifndef MARK_MAX_PACKET
-#define MARK_MAX_PACKET 10
-#endif
-
-#ifndef MARK_MASK_PREFIX
-#define MARK_MASK_PREFIX 0xDC00
-#endif
-
 #endif
 
 static void signal_cb(EV_P_ ev_signal *w, int revents);
@@ -101,9 +73,6 @@ int fast_open        = 0;
 static int no_delay  = 0;
 static int ret_val   = 0;
 
-#ifdef HAVE_SETRLIMIT
-static int nofile = 0;
-#endif
 static int remote_conn = 0;
 static int server_conn = 0;
 
@@ -119,97 +88,9 @@ ev_timer stat_update_watcher;
 
 static struct ev_signal sigint_watcher;
 static struct ev_signal sigterm_watcher;
-#ifndef __MINGW32__
 static struct ev_signal sigchld_watcher;
-#else
-static struct plugin_watcher_t {
-    ev_io io;
-    SOCKET fd;
-    uint16_t port;
-    int valid;
-} plugin_watcher;
-#endif
 
 static struct cork_dllist connections;
-
-#ifndef __MINGW32__
-static void
-stat_update_cb(EV_P_ ev_timer *watcher, int revents)
-{
-    struct sockaddr_un svaddr, claddr;
-    int sfd = -1;
-    size_t msgLen;
-    char resp[SOCKET_BUF_SIZE];
-
-    if (verbose) {
-        LOGI("update traffic stat: tx: %" PRIu64 " rx: %" PRIu64 "", tx, rx);
-    }
-
-    snprintf(resp, SOCKET_BUF_SIZE, "stat: {\"%s\":%" PRIu64 "}", remote_port, tx + rx);
-    msgLen = strlen(resp) + 1;
-
-    ss_addr_t ip_addr = { .host = NULL, .port = NULL };
-    parse_addr(manager_addr, &ip_addr);
-
-    if (ip_addr.host == NULL || ip_addr.port == NULL) {
-        sfd = socket(AF_UNIX, SOCK_DGRAM, 0);
-        if (sfd == -1) {
-            ERROR("stat_socket");
-            return;
-        }
-
-        memset(&claddr, 0, sizeof(struct sockaddr_un));
-        claddr.sun_family = AF_UNIX;
-        snprintf(claddr.sun_path, sizeof(claddr.sun_path), "/tmp/shadowsocks.%s", remote_port);
-
-        unlink(claddr.sun_path);
-
-        if (bind(sfd, (struct sockaddr *)&claddr, sizeof(struct sockaddr_un)) == -1) {
-            ERROR("stat_bind");
-            close(sfd);
-            return;
-        }
-
-        memset(&svaddr, 0, sizeof(struct sockaddr_un));
-        svaddr.sun_family = AF_UNIX;
-        strncpy(svaddr.sun_path, manager_addr, sizeof(svaddr.sun_path) - 1);
-
-        if (sendto(sfd, resp, strlen(resp) + 1, 0, (struct sockaddr *)&svaddr,
-                   sizeof(struct sockaddr_un)) != msgLen) {
-            ERROR("stat_sendto");
-            close(sfd);
-            return;
-        }
-
-        unlink(claddr.sun_path);
-    } else {
-        struct sockaddr_storage storage;
-        memset(&storage, 0, sizeof(struct sockaddr_storage));
-        if (get_sockaddr(ip_addr.host, ip_addr.port, &storage, 0, ipv6first) == -1) {
-            ERROR("failed to parse the manager addr");
-            return;
-        }
-
-        sfd = socket(storage.ss_family, SOCK_DGRAM, 0);
-
-        if (sfd == -1) {
-            ERROR("stat_socket");
-            return;
-        }
-
-        size_t addr_len = get_sockaddr_len((struct sockaddr *)&storage);
-        if (sendto(sfd, resp, strlen(resp) + 1, 0, (struct sockaddr *)&storage,
-                   addr_len) != msgLen) {
-            ERROR("stat_sendto");
-            close(sfd);
-            return;
-        }
-    }
-
-    close(sfd);
-}
-
-#endif
 
 static void
 free_connections(struct ev_loop *loop)
@@ -261,39 +142,6 @@ report_addr(int fd, const char *info)
     if (peer_name != NULL) {
         LOGE("failed to handshake with %s: %s", peer_name, info);
     }
-
-#ifdef USE_NFTABLES
-    struct sockaddr_in6 addr;
-    socklen_t len = sizeof(struct sockaddr_in6);
-    if (!getpeername(fd, (struct sockaddr *)&addr, &len))
-        nftbl_report_addr((struct sockaddr *)&addr);
-#endif
-}
-
-int
-setfastopen(int fd)
-{
-    int s = 0;
-#ifdef TCP_FASTOPEN
-    if (fast_open) {
-#if defined(__APPLE__) || defined(__MINGW32__)
-        int opt = 1;
-#else
-        int opt = 5;
-#endif
-        s = setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, &opt, sizeof(opt));
-
-        if (s == -1) {
-            if (errno == EPROTONOSUPPORT || errno == ENOPROTOOPT) {
-                LOGE("fast open is not supported on this platform");
-                fast_open = 0;
-            } else {
-                ERROR("setsockopt");
-            }
-        }
-    }
-#endif
-    return s;
 }
 
 #ifndef __MINGW32__
@@ -488,108 +336,7 @@ connect_to_remote(EV_P_ struct addrinfo *res,
         }
     }
 
-#ifdef SET_INTERFACE
-    if (iface) {
-        if (setinterface(sockfd, iface) == -1) {
-            ERROR("setinterface");
-            close(sockfd);
-            return NULL;
-        }
-    }
-#endif
-
     remote_t *remote = new_remote(sockfd);
-
-    if (fast_open) {
-#if defined(MSG_FASTOPEN) && !defined(TCP_FASTOPEN_CONNECT)
-        int s = -1;
-        s = sendto(sockfd, server->buf->data + server->buf->idx, server->buf->len,
-                   MSG_FASTOPEN, res->ai_addr, res->ai_addrlen);
-#elif defined(TCP_FASTOPEN_WINSOCK)
-        DWORD s   = -1;
-        DWORD err = 0;
-        do {
-            int optval = 1;
-            // Set fast open option
-            if (setsockopt(sockfd, IPPROTO_TCP, TCP_FASTOPEN,
-                           &optval, sizeof(optval)) != 0) {
-                ERROR("setsockopt");
-                break;
-            }
-            // Load ConnectEx function
-            LPFN_CONNECTEX ConnectEx = winsock_getconnectex();
-            if (ConnectEx == NULL) {
-                LOGE("Cannot load ConnectEx() function");
-                err = WSAENOPROTOOPT;
-                break;
-            }
-            // ConnectEx requires a bound socket
-            if (winsock_dummybind(sockfd, res->ai_addr) != 0) {
-                ERROR("bind");
-                break;
-            }
-            // Call ConnectEx to send data
-            memset(&remote->olap, 0, sizeof(remote->olap));
-            remote->connect_ex_done = 0;
-            if (ConnectEx(sockfd, res->ai_addr, res->ai_addrlen,
-                          server->buf->data + server->buf->idx,
-                          server->buf->len, &s, &remote->olap)) {
-                remote->connect_ex_done = 1;
-                break;
-            }
-            // XXX: ConnectEx pending, check later in remote_send
-            if (WSAGetLastError() == ERROR_IO_PENDING) {
-                err = CONNECT_IN_PROGRESS;
-                break;
-            }
-            ERROR("ConnectEx");
-        } while (0);
-        // Set error number
-        if (err) {
-            SetLastError(err);
-        }
-#else
-        int s = -1;
-#if defined(TCP_FASTOPEN_CONNECT)
-        int optval = 1;
-        if (setsockopt(sockfd, IPPROTO_TCP, TCP_FASTOPEN_CONNECT,
-                       (void *)&optval, sizeof(optval)) < 0)
-            FATAL("failed to set TCP_FASTOPEN_CONNECT");
-        s = connect(sockfd, res->ai_addr, res->ai_addrlen);
-#elif defined(CONNECT_DATA_IDEMPOTENT)
-        struct sockaddr_in sa;
-        memcpy(&sa, res->ai_addr, sizeof(struct sockaddr_in));
-        sa.sin_len = sizeof(struct sockaddr_in);
-        sa_endpoints_t endpoints;
-        memset((char *)&endpoints, 0, sizeof(endpoints));
-        endpoints.sae_dstaddr    = (struct sockaddr *)&sa;
-        endpoints.sae_dstaddrlen = res->ai_addrlen;
-
-        s = connectx(sockfd, &endpoints, SAE_ASSOCID_ANY, CONNECT_DATA_IDEMPOTENT,
-                     NULL, 0, NULL, NULL);
-#else
-        FATAL("fast open is not enabled in this build");
-#endif
-        if (s == 0)
-            s = send(sockfd, server->buf->data + server->buf->idx, server->buf->len, 0);
-#endif
-        if (s == -1) {
-            if (errno == CONNECT_IN_PROGRESS) {
-                // The remote server doesn't support tfo or it's the first connection to the server.
-                // It will automatically fall back to conventional TCP.
-            } else if (errno == EOPNOTSUPP || errno == EPROTONOSUPPORT ||
-                       errno == ENOPROTOOPT) {
-                // Disable fast open as it's not supported
-                fast_open = 0;
-                LOGE("fast open is not supported on this platform");
-            } else {
-                ERROR("fast_open_connect");
-            }
-        } else {
-            server->buf->idx += s;
-            server->buf->len -= s;
-        }
-    }
 
     if (!fast_open) {
         int r = connect(sockfd, res->ai_addr, res->ai_addrlen);
@@ -1398,27 +1145,6 @@ signal_cb(EV_P_ ev_signal *w, int revents)
     }
 }
 
-#ifdef __MINGW32__
-static void
-plugin_watcher_cb(EV_P_ ev_io *w, int revents)
-{
-    char buf[1];
-    SOCKET fd = accept(plugin_watcher.fd, NULL, NULL);
-    if (fd == INVALID_SOCKET) {
-        return;
-    }
-    recv(fd, buf, 1, 0);
-    closesocket(fd);
-    LOGE("plugin service exit unexpectedly");
-    ret_val = -1;
-    ev_signal_stop(EV_DEFAULT, &sigint_watcher);
-    ev_signal_stop(EV_DEFAULT, &sigterm_watcher);
-    ev_io_stop(EV_DEFAULT, &plugin_watcher.io);
-    ev_unloop(EV_A_ EVUNLOOP_ALL);
-}
-
-#endif
-
 static void
 accept_cb(EV_P_ ev_io *w, int revents)
 {
@@ -1467,7 +1193,6 @@ accept_cb(EV_P_ ev_io *w, int revents)
 int
 main(int argc, char **argv)
 {
-    int i, c;
     int pid_flags   = 0;
     int mptcp       = 0;
     int mtu         = 0;
@@ -1481,10 +1206,6 @@ main(int argc, char **argv)
     char *iface     = NULL;
 
     char *server_port = NULL;
-    char *plugin_opts = NULL;
-    char *plugin_host = NULL;
-    char *plugin_port = NULL;
-    char tmp_port[8];
     char *nameservers = NULL;
 
     int server_num = 0;
@@ -1493,123 +1214,78 @@ main(int argc, char **argv)
     memset(&local_addr_v4, 0, sizeof(struct sockaddr_storage));
     memset(&local_addr_v6, 0, sizeof(struct sockaddr_storage));
 
-    static struct option long_options[] = {
-        { "fast-open",       no_argument,       NULL, GETOPT_VAL_FAST_OPEN   },
-        { "reuse-port",      no_argument,       NULL, GETOPT_VAL_REUSE_PORT  },
-        { "tcp-incoming-sndbuf", required_argument, NULL, GETOPT_VAL_TCP_INCOMING_SNDBUF },
-        { "tcp-incoming-rcvbuf", required_argument, NULL, GETOPT_VAL_TCP_INCOMING_RCVBUF },
-        { "tcp-outgoing-sndbuf", required_argument, NULL, GETOPT_VAL_TCP_OUTGOING_SNDBUF },
-        { "tcp-outgoing-rcvbuf", required_argument, NULL, GETOPT_VAL_TCP_OUTGOING_RCVBUF },
-        { "no-delay",        no_argument,       NULL, GETOPT_VAL_NODELAY     },
-        { "acl",             required_argument, NULL, GETOPT_VAL_ACL         },
-        { "manager-address", required_argument, NULL,
-          GETOPT_VAL_MANAGER_ADDRESS },
-        { "mtu",             required_argument, NULL, GETOPT_VAL_MTU         },
-        { "help",            no_argument,       NULL, GETOPT_VAL_HELP        },
-        { "plugin",          required_argument, NULL, GETOPT_VAL_PLUGIN      },
-        { "plugin-opts",     required_argument, NULL, GETOPT_VAL_PLUGIN_OPTS },
-        { "password",        required_argument, NULL, GETOPT_VAL_PASSWORD    },
-        { "key",             required_argument, NULL, GETOPT_VAL_KEY         },
-#ifdef __linux__
-        { "mptcp",           no_argument,       NULL, GETOPT_VAL_MPTCP       },
-#ifdef USE_NFTABLES
-        { "nftables-sets",   required_argument, NULL, GETOPT_VAL_NFTABLES_SETS },
-#endif
-#endif
-        { NULL,              0,                 NULL, 0                      }
-    };
-
     opterr = 0;
 
     USE_TTY();
 
-    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:b:c:i:d:a:n:huUv6A",
-                            long_options, NULL)) != -1) {
-        switch (c) {
-        case 'c':
-            conf_path = optarg;
-            break;
-        }
-    }
+    conf_path = "conf.json";
 
-    if (conf_path != NULL) {
-        jconf_t *conf = read_jconf(conf_path);
-        if (server_num == 0) {
-            server_num = conf->remote_num;
-            for (i = 0; i < server_num; i++)
-                server_addr[i] = conf->remote_addr[i];
-        }
-        if (server_port == NULL) {
-            server_port = conf->remote_port;
-        }
-        if (password == NULL) {
-            password = conf->password;
-        }
-        if (key == NULL) {
-            key = conf->key;
-        }
-        if (method == NULL) {
-            method = conf->method;
-        }
-        if (timeout == NULL) {
-            timeout = conf->timeout;
-        }
-        if (user == NULL) {
-            user = conf->user;
-        }
-        if (plugin == NULL) {
-            plugin = conf->plugin;
-        }
-        if (plugin_opts == NULL) {
-            plugin_opts = conf->plugin_opts;
-        }
-        if (mode == TCP_ONLY) {
-            mode = conf->mode;
-        }
-        if (mtu == 0) {
-            mtu = conf->mtu;
-        }
-        if (mptcp == 0) {
-            mptcp = conf->mptcp;
-        }
-        if (no_delay == 0) {
-            no_delay = conf->no_delay;
-        }
-        if (reuse_port == 0) {
-            reuse_port = conf->reuse_port;
-        }
-        if (tcp_incoming_sndbuf == 0) {
-            tcp_incoming_sndbuf = conf->tcp_incoming_sndbuf;
-        }
-        if (tcp_incoming_rcvbuf == 0) {
-            tcp_incoming_rcvbuf = conf->tcp_incoming_rcvbuf;
-        }
-        if (tcp_outgoing_sndbuf == 0) {
-            tcp_outgoing_sndbuf = conf->tcp_outgoing_sndbuf;
-        }
-        if (tcp_outgoing_rcvbuf == 0) {
-            tcp_outgoing_rcvbuf = conf->tcp_outgoing_rcvbuf;
-        }
-        if (fast_open == 0) {
-            fast_open = conf->fast_open;
-        }
-        if (is_bind_local_addr == 0) {
-            is_bind_local_addr += parse_local_addr(&local_addr_v4, &local_addr_v6, conf->local_addr);
-        }
-        if (is_bind_local_addr == 0) {
-            is_bind_local_addr += parse_local_addr(&local_addr_v4, &local_addr_v6, conf->local_addr_v4);
-            is_bind_local_addr += parse_local_addr(&local_addr_v4, &local_addr_v6, conf->local_addr_v6);
-        }
-        if (nameservers == NULL) {
-            nameservers = conf->nameserver;
-        }
-        if (ipv6first == 0) {
-            ipv6first = conf->ipv6_first;
-        }
-        if (acl == 0 && conf->acl != NULL) {
-            LOGI("initializing acl...");
-            acl = !init_acl(conf->acl);
-        }
+    jconf_t *conf = read_jconf(conf_path);
+    server_num = 1;
+    server_addr[0] = conf->remote_addr[0];
+    server_port = conf->remote_port;
+    password = conf->password;
+    if (key == NULL) {
+        key = conf->key;
+    }
+    if (method == NULL) {
+        method = conf->method;
+    }
+    if (timeout == NULL) {
+        timeout = conf->timeout;
+    }
+    if (user == NULL) {
+        user = conf->user;
+    }
+    if (plugin == NULL) {
+        plugin = conf->plugin;
+    }
+    if (mode == TCP_ONLY) {
+        mode = conf->mode;
+    }
+    if (mtu == 0) {
+        mtu = conf->mtu;
+    }
+    if (mptcp == 0) {
+        mptcp = conf->mptcp;
+    }
+    if (no_delay == 0) {
+        no_delay = conf->no_delay;
+    }
+    if (reuse_port == 0) {
+        reuse_port = conf->reuse_port;
+    }
+    if (tcp_incoming_sndbuf == 0) {
+        tcp_incoming_sndbuf = conf->tcp_incoming_sndbuf;
+    }
+    if (tcp_incoming_rcvbuf == 0) {
+        tcp_incoming_rcvbuf = conf->tcp_incoming_rcvbuf;
+    }
+    if (tcp_outgoing_sndbuf == 0) {
+        tcp_outgoing_sndbuf = conf->tcp_outgoing_sndbuf;
+    }
+    if (tcp_outgoing_rcvbuf == 0) {
+        tcp_outgoing_rcvbuf = conf->tcp_outgoing_rcvbuf;
+    }
+    if (fast_open == 0) {
+        fast_open = conf->fast_open;
+    }
+    if (is_bind_local_addr == 0) {
+        is_bind_local_addr += parse_local_addr(&local_addr_v4, &local_addr_v6, conf->local_addr);
+    }
+    if (is_bind_local_addr == 0) {
+        is_bind_local_addr += parse_local_addr(&local_addr_v4, &local_addr_v6, conf->local_addr_v4);
+        is_bind_local_addr += parse_local_addr(&local_addr_v4, &local_addr_v6, conf->local_addr_v6);
+    }
+    if (nameservers == NULL) {
+        nameservers = conf->nameserver;
+    }
+    if (ipv6first == 0) {
+        ipv6first = conf->ipv6_first;
+    }
+    if (acl == 0 && conf->acl != NULL) {
+        LOGI("initializing acl...");
+        acl = !init_acl(conf->acl);
     }
 
     if (tcp_incoming_sndbuf != 0 && tcp_incoming_sndbuf < SOCKET_BUF_SIZE) {
@@ -1654,35 +1330,7 @@ main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    if (is_ipv6only(server_addr, server_num, ipv6first)) {
-        plugin_host = "::1";
-    } else {
-        plugin_host = "127.0.0.1";
-    }
-
     remote_port = server_port;
-
-#ifdef __MINGW32__
-    winsock_init();
-#endif
-
-    if (plugin != NULL) {
-        uint16_t port = get_local_port();
-        if (port == 0) {
-            FATAL("failed to find a free port");
-        }
-        snprintf(tmp_port, 8, "%d", port);
-        plugin_port = server_port;
-        server_port = tmp_port;
-
-#ifdef __MINGW32__
-        memset(&plugin_watcher, 0, sizeof(plugin_watcher));
-        plugin_watcher.port = get_local_port();
-        if (plugin_watcher.port == 0) {
-            LOGE("failed to assign a control port for plugin");
-        }
-#endif
-    }
 
     if (method == NULL) {
         method = "chacha20-ietf-poly1305";
@@ -1692,19 +1340,6 @@ main(int argc, char **argv)
         timeout = "60";
     }
 
-#ifdef HAVE_SETRLIMIT
-    /*
-     * no need to check the return value here since we will show
-     * the user an error message if setrlimit(2) fails
-     */
-    if (nofile > 1024) {
-        if (verbose) {
-            LOGI("setting NOFILE to %d", nofile);
-        }
-        set_nofile(nofile);
-    }
-#endif
-
     USE_SYSLOG(argv[0], pid_flags);
     if (pid_flags) {
         daemonize(pid_path);
@@ -1712,15 +1347,6 @@ main(int argc, char **argv)
 
     if (ipv6first) {
         LOGI("resolving hostname to IPv6 address first");
-    }
-
-    if (fast_open == 1) {
-#ifdef TCP_FASTOPEN
-        LOGI("using tcp fast open");
-#else
-        LOGE("tcp fast open is not supported by this environment");
-        fast_open = 0;
-#endif
     }
 
     if (plugin != NULL) {
@@ -1769,65 +1395,6 @@ main(int argc, char **argv)
     if (nameservers != NULL)
         LOGI("using nameserver: %s", nameservers);
 
-#ifdef __MINGW32__
-    // Listen on plugin control port
-    if (plugin != NULL && plugin_watcher.port != 0) {
-        SOCKET fd;
-        fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (fd != INVALID_SOCKET) {
-            plugin_watcher.valid = 0;
-            do {
-                struct sockaddr_in addr;
-                memset(&addr, 0, sizeof(addr));
-                addr.sin_family      = AF_INET;
-                addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-                addr.sin_port        = htons(plugin_watcher.port);
-                if (bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
-                    LOGE("failed to bind plugin control port");
-                    break;
-                }
-                if (listen(fd, 1)) {
-                    LOGE("failed to listen on plugin control port");
-                    break;
-                }
-                plugin_watcher.fd = fd;
-                ev_io_init(&plugin_watcher.io, plugin_watcher_cb, fd, EV_READ);
-                ev_io_start(EV_DEFAULT, &plugin_watcher.io);
-                plugin_watcher.valid = 1;
-            } while (0);
-            if (!plugin_watcher.valid) {
-                closesocket(fd);
-                plugin_watcher.port = 0;
-            }
-        }
-    }
-#endif
-
-    // Start plugin server
-    if (plugin != NULL) {
-        int len          = 0;
-        size_t buf_size  = 256 * server_num;
-        char *server_str = ss_malloc(buf_size);
-
-        snprintf(server_str, buf_size, "%s", server_addr[0].host);
-        len = strlen(server_str);
-        for (int i = 1; i < server_num; i++) {
-            snprintf(server_str + len, buf_size - len, "|%s", server_addr[i].host);
-            len = strlen(server_str);
-        }
-
-        int err = start_plugin(plugin, plugin_opts, server_str,
-                               plugin_port, plugin_host, server_port,
-#ifdef __MINGW32__
-                               plugin_watcher.port,
-#endif
-                               MODE_SERVER);
-        if (err) {
-            ERROR("start_plugin");
-            FATAL("failed to start the plugin");
-        }
-    }
-
     // initialize listen context
     listen_ctx_t listen_ctx_list[server_num];
 
@@ -1837,10 +1404,6 @@ main(int argc, char **argv)
         for (int i = 0; i < server_num; i++) {
             const char *host = server_addr[i].host;
             const char *port = server_addr[i].port ? server_addr[i].port : server_port;
-
-            if (plugin != NULL) {
-                host = plugin_host;
-            }
 
             if (host && ss_is_ipv6addr(host))
                 LOGI("tcp server listening at [%s]:%s", host, port);
@@ -1857,7 +1420,6 @@ main(int argc, char **argv)
                 ERROR("listen()");
                 continue;
             }
-            setfastopen(listenfd);
             setnonblocking(listenfd);
             listen_ctx_t *listen_ctx = &listen_ctx_list[i];
 
@@ -1886,9 +1448,6 @@ main(int argc, char **argv)
         for (int i = 0; i < server_num; i++) {
             const char *host = server_addr[i].host;
             const char *port = server_addr[i].port ? server_addr[i].port : server_port;
-            if (plugin != NULL) {
-                port = plugin_port;
-            }
             if (host && ss_is_ipv6addr(host))
                 LOGI("udp server listening at [%s]:%s", host, port);
             else
@@ -1904,13 +1463,6 @@ main(int argc, char **argv)
             FATAL("failed to listen on any address");
         }
     }
-
-#ifndef __MINGW32__
-    if (manager_addr != NULL) {
-        ev_timer_init(&stat_update_watcher, stat_update_cb, UPDATE_INTERVAL, UPDATE_INTERVAL);
-        ev_timer_start(EV_DEFAULT, &stat_update_watcher);
-    }
-#endif
 
 #ifndef __MINGW32__
     // setuid
@@ -1929,9 +1481,7 @@ main(int argc, char **argv)
     // start ev loop
     ev_run(loop, 0);
 
-    if (verbose) {
-        LOGI("closed gracefully");
-    }
+    LOGI("closed gracefully");
 
 #ifndef __MINGW32__
     if (manager_addr != NULL) {
@@ -1964,14 +1514,6 @@ main(int argc, char **argv)
     if (mode != TCP_ONLY) {
         free_udprelay();
     }
-
-#ifdef __MINGW32__
-    if (plugin_watcher.valid) {
-        closesocket(plugin_watcher.fd);
-    }
-
-    winsock_cleanup();
-#endif
 
     return ret_val;
 }
