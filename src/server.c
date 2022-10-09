@@ -24,9 +24,8 @@
 #include "netutils.h"
 #include "utils.h"
 #include "acl.h"
-#include "plugin.h" 
-#include "server.h" 
-#include "winsock.h" 
+#include "server.h"
+#include "winsock.h"
 #include "resolv.h"
 
 #ifndef SSMAXCONN
@@ -50,8 +49,6 @@ static void free_remote(remote_t *remote);
 static void close_and_free_remote(EV_P_ remote_t *remote);
 static void free_server(server_t *server);
 static void close_and_free_server(EV_P_ server_t *server);
-static void resolv_cb(struct sockaddr *addr, void *data);
-static void resolv_free_cb(void *data);
 
 int verbose    = 0;
 int reuse_port = 0;
@@ -76,7 +73,6 @@ static int ret_val   = 0;
 static int remote_conn = 0;
 static int server_conn = 0;
 
-static char *plugin       = NULL;
 static char *remote_port  = NULL;
 static char *manager_addr = NULL;
 uint64_t tx               = 0;
@@ -492,7 +488,6 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
          */
 
         int offset     = 0;
-        int need_query = 0;
         char atyp      = server->buf->data[offset++];
         char host[255] = { 0 };
         uint16_t port  = 0;
@@ -559,51 +554,35 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
                 LOGI("[%s] connect to %s:%d", remote_port, host, ntohs(port));
         }
 
-        if (!need_query)
+        remote_t *remote = connect_to_remote(EV_A_ & info, server);
+
+        if (remote == NULL)
         {
-            remote_t *remote = connect_to_remote(EV_A_ & info, server);
-
-            if (remote == NULL)
-            {
-                LOGE("connect error");
-                close_and_free_server(EV_A_ server);
-                return;
-            }
-            else
-            {
-                server->remote = remote;
-                remote->server = server;
-
-                // XXX: should handle buffer carefully
-                if (server->buf->len > 0) {
-                    printf("LOLO again\n");
-                    brealloc(remote->buf, server->buf->len, SOCKET_BUF_SIZE);
-                    memcpy(remote->buf->data, server->buf->data + server->buf->idx,
-                           server->buf->len);
-                    remote->buf->len = server->buf->len;
-                    remote->buf->idx = 0;
-                    server->buf->len = 0;
-                    server->buf->idx = 0;
-                }
-
-                // waiting on remote connected event
-                ev_io_stop(EV_A_ & server_recv_ctx->io);
-                ev_io_start(EV_A_ & remote->send_ctx->io);
-            }
+            LOGE("connect error");
+            close_and_free_server(EV_A_ server);
+            return;
         }
         else
         {
-            printf("mamaro LOLO bord\n");
+            server->remote = remote;
+            remote->server = server;
+
+            // XXX: should handle buffer carefully
+            if (server->buf->len > 0)
+            {
+                printf("LOLO again\n");
+                brealloc(remote->buf, server->buf->len, SOCKET_BUF_SIZE);
+                memcpy(remote->buf->data, server->buf->data + server->buf->idx,
+                        server->buf->len);
+                remote->buf->len = server->buf->len;
+                remote->buf->idx = 0;
+                server->buf->len = 0;
+                server->buf->idx = 0;
+            }
+
+            // waiting on remote connected event
             ev_io_stop(EV_A_ & server_recv_ctx->io);
-
-            query_t *query = ss_malloc(sizeof(query_t));
-            memset(query, 0, sizeof(query_t));
-            query->server = server;
-            server->query = query;
-            snprintf(query->hostname, MAX_HOSTNAME_LEN, "%s", host);
-
-            server->stage = STAGE_RESOLVE;
-            resolv_start(host, port, resolv_cb, resolv_free_cb, query);
+            ev_io_start(EV_A_ & remote->send_ctx->io);
         }
 
         return;
@@ -680,76 +659,6 @@ server_timeout_cb(EV_P_ ev_timer *watcher, int revents)
 
     close_and_free_remote(EV_A_ remote);
     close_and_free_server(EV_A_ server);
-}
-
-static void
-resolv_free_cb(void *data)
-{
-    query_t *query = (query_t *)data;
-
-    if (query != NULL) {
-        if (query->server != NULL)
-            query->server->query = NULL;
-        ss_free(query);
-    }
-}
-
-static void
-resolv_cb(struct sockaddr *addr, void *data)
-{
-    query_t *query   = (query_t *)data;
-    server_t *server = query->server;
-
-    if (server == NULL)
-        return;
-
-    struct ev_loop *loop = server->listen_ctx->loop;
-
-    if (addr == NULL) {
-        LOGE("unable to resolve %s", query->hostname);
-        close_and_free_server(EV_A_ server);
-    } else {
-        if (verbose) {
-            LOGI("successfully resolved %s", query->hostname);
-        }
-
-        struct addrinfo info;
-        memset(&info, 0, sizeof(struct addrinfo));
-        info.ai_socktype = SOCK_STREAM;
-        info.ai_protocol = IPPROTO_TCP;
-        info.ai_addr     = addr;
-
-        if (addr->sa_family == AF_INET) {
-            info.ai_family  = AF_INET;
-            info.ai_addrlen = sizeof(struct sockaddr_in);
-        } else if (addr->sa_family == AF_INET6) {
-            info.ai_family  = AF_INET6;
-            info.ai_addrlen = sizeof(struct sockaddr_in6);
-        }
-
-        remote_t *remote = connect_to_remote(EV_A_ & info, server);
-
-        if (remote == NULL) {
-            close_and_free_server(EV_A_ server);
-        } else {
-            server->remote = remote;
-            remote->server = server;
-
-            // XXX: should handle buffer carefully
-            if (server->buf->len > 0) {
-                brealloc(remote->buf, server->buf->len, SOCKET_BUF_SIZE);
-                memcpy(remote->buf->data, server->buf->data + server->buf->idx,
-                       server->buf->len);
-                remote->buf->len = server->buf->len;
-                remote->buf->idx = 0;
-                server->buf->len = 0;
-                server->buf->idx = 0;
-            }
-
-            // listen to remote connected event
-            ev_io_start(EV_A_ & remote->send_ctx->io);
-        }
-    }
 }
 
 static void
@@ -1125,21 +1034,13 @@ signal_cb(EV_P_ ev_signal *w, int revents)
         switch (w->signum) {
 #ifndef __MINGW32__
         case SIGCHLD:
-            if (!is_plugin_running()) {
-                LOGE("plugin service exit unexpectedly");
-                ret_val = -1;
-            } else
-                return;
+            return;
 #endif
         case SIGINT:
         case SIGTERM:
             ev_signal_stop(EV_DEFAULT, &sigint_watcher);
             ev_signal_stop(EV_DEFAULT, &sigterm_watcher);
-#ifndef __MINGW32__
             ev_signal_stop(EV_DEFAULT, &sigchld_watcher);
-#else
-            ev_io_stop(EV_DEFAULT, &plugin_watcher.io);
-#endif
             ev_unloop(EV_A_ EVUNLOOP_ALL);
         }
     }
@@ -1236,9 +1137,6 @@ main(int argc, char **argv)
     }
     if (user == NULL) {
         user = conf->user;
-    }
-    if (plugin == NULL) {
-        plugin = conf->plugin;
     }
     if (mode == TCP_ONLY) {
         mode = conf->mode;
@@ -1349,10 +1247,6 @@ main(int argc, char **argv)
         LOGI("resolving hostname to IPv6 address first");
     }
 
-    if (plugin != NULL) {
-        LOGI("plugin \"%s\" enabled", plugin);
-    }
-
     if (mode != TCP_ONLY) {
         LOGI("UDP relay enabled");
     }
@@ -1434,8 +1328,6 @@ main(int argc, char **argv)
 
             num_listen_ctx++;
 
-            if (plugin != NULL)
-                break;
         }
 
         if (num_listen_ctx == 0) {
@@ -1489,10 +1381,6 @@ main(int argc, char **argv)
     }
 #endif
 
-    if (plugin != NULL) {
-        stop_plugin();
-    }
-
     // Clean up
 
     resolv_shutdown(loop);
@@ -1503,8 +1391,6 @@ main(int argc, char **argv)
             ev_io_stop(loop, &listen_ctx->io);
             close(listen_ctx->fd);
         }
-        if (plugin != NULL)
-            break;
     }
 
     if (mode != UDP_ONLY) {
