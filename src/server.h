@@ -1,25 +1,3 @@
-/*
- * server.h - Define shadowsocks server's buffers and callbacks
- *
- * Copyright (C) 2013 - 2019, Max Lv <max.c.lv@gmail.com>
- *
- * This file is part of the shadowsocks-libev.
- *
- * shadowsocks-libev is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * shadowsocks-libev is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with shadowsocks-libev; see the file COPYING. If not, see
- * <http://www.gnu.org/licenses/>.
- */
-
 #ifndef _SERVER_H
 #define _SERVER_H
 
@@ -30,10 +8,6 @@
 #include <libev/ev.h>
 #else
 #include <ev.h>
-#endif
-
-#ifdef __MINGW32__
-#include "winsock.h"
 #endif
 
 #include "crypto.h"
@@ -57,20 +31,6 @@ typedef struct server_ctx {
     struct server *server;
 } server_ctx_t;
 
-#ifdef USE_NFCONNTRACK_TOS
-
-#include <libnetfilter_conntrack/libnetfilter_conntrack.h>
-#include <libnetfilter_conntrack/libnetfilter_conntrack_tcp.h>
-
-struct dscptracker {
-    struct nf_conntrack *ct;
-    long unsigned int mark;
-    unsigned int dscp;
-    unsigned int packet_count;
-};
-
-#endif
-
 struct query;
 
 typedef struct server {
@@ -90,9 +50,6 @@ typedef struct server {
     struct query *query;
 
     struct cork_dllist_item entries;
-#ifdef USE_NFCONNTRACK_TOS
-    struct dscptracker *tracker;
-#endif
 } server_t;
 
 typedef struct query {
@@ -108,14 +65,28 @@ typedef struct remote_ctx {
 
 typedef struct remote {
     int fd;
-#ifdef TCP_FASTOPEN_WINSOCK
-    OVERLAPPED olap;
-    int connect_ex_done;
-#endif
     buffer_t *buf;
     struct remote_ctx *recv_ctx;
     struct remote_ctx *send_ctx;
     struct server *server;
 } remote_t;
+
+static void signal_cb(EV_P_ ev_signal *w, int revents);
+static void accept_cb(EV_P_ ev_io *w, int revents);
+static void server_send_cb(EV_P_ ev_io *w, int revents);
+static void server_recv_cb(EV_P_ ev_io *w, int revents);
+static void remote_recv_cb(EV_P_ ev_io *w, int revents);
+static void remote_send_cb(EV_P_ ev_io *w, int revents);
+static void server_timeout_cb(EV_P_ ev_timer *watcher, int revents);
+
+static remote_t *new_remote(int fd);
+static server_t *new_server(int fd, listen_ctx_t *listener);
+static remote_t *connect_to_remote(EV_P_ struct addrinfo *res,
+                                   server_t *server);
+
+static void free_remote(remote_t *remote);
+static void close_and_free_remote(EV_P_ remote_t *remote);
+static void free_server(server_t *server);
+static void close_and_free_server(EV_P_ server_t *server);
 
 #endif // _SERVER_H

@@ -23,32 +23,13 @@
 
 #include "netutils.h"
 #include "utils.h"
-#include "acl.h"
-#include "server.h"
-#include "winsock.h"
+#include "server.h" 
+#include "winsock.h" 
 #include "resolv.h"
 
 #ifndef SSMAXCONN
 #define SSMAXCONN 1024
 #endif
-
-static void signal_cb(EV_P_ ev_signal *w, int revents);
-static void accept_cb(EV_P_ ev_io *w, int revents);
-static void server_send_cb(EV_P_ ev_io *w, int revents);
-static void server_recv_cb(EV_P_ ev_io *w, int revents);
-static void remote_recv_cb(EV_P_ ev_io *w, int revents);
-static void remote_send_cb(EV_P_ ev_io *w, int revents);
-static void server_timeout_cb(EV_P_ ev_timer *watcher, int revents);
-
-static remote_t *new_remote(int fd);
-static server_t *new_server(int fd, listen_ctx_t *listener);
-static remote_t *connect_to_remote(EV_P_ struct addrinfo *res,
-                                   server_t *server);
-
-static void free_remote(remote_t *remote);
-static void close_and_free_remote(EV_P_ remote_t *remote);
-static void free_server(server_t *server);
-static void close_and_free_server(EV_P_ server_t *server);
 
 int verbose    = 0;
 int reuse_port = 0;
@@ -63,7 +44,6 @@ struct sockaddr_storage local_addr_v6;
 
 static crypto_t *crypto;
 
-static int acl       = 0;
 static int mode      = TCP_ONLY;
 static int ipv6first = 0;
 int fast_open        = 0;
@@ -74,13 +54,10 @@ static int remote_conn = 0;
 static int server_conn = 0;
 
 static char *remote_port  = NULL;
-static char *manager_addr = NULL;
 uint64_t tx               = 0;
 uint64_t rx               = 0;
 
-#ifndef __MINGW32__
 ev_timer stat_update_watcher;
-#endif
 
 static struct ev_signal sigint_watcher;
 static struct ev_signal sigterm_watcher;
@@ -100,29 +77,6 @@ free_connections(struct ev_loop *loop)
     }
 }
 
-static char *
-get_peer_name(int fd)
-{
-    static char peer_name[INET6_ADDRSTRLEN] = { 0 };
-    struct sockaddr_storage addr;
-    socklen_t len = sizeof(struct sockaddr_storage);
-    memset(&addr, 0, len);
-    memset(peer_name, 0, INET6_ADDRSTRLEN);
-    int err = getpeername(fd, (struct sockaddr *)&addr, &len);
-    if (err == 0) {
-        if (addr.ss_family == AF_INET) {
-            struct sockaddr_in *s = (struct sockaddr_in *)&addr;
-            inet_ntop(AF_INET, &s->sin_addr, peer_name, INET_ADDRSTRLEN);
-        } else if (addr.ss_family == AF_INET6) {
-            struct sockaddr_in6 *s = (struct sockaddr_in6 *)&addr;
-            inet_ntop(AF_INET6, &s->sin6_addr, peer_name, INET6_ADDRSTRLEN);
-        }
-    } else {
-        return NULL;
-    }
-    return peer_name;
-}
-
 static void
 stop_server(EV_P_ server_t *server)
 {
@@ -130,19 +84,7 @@ stop_server(EV_P_ server_t *server)
     server->stage = STAGE_STOP;
 }
 
-static void
-report_addr(int fd, const char *info)
-{
-    char *peer_name;
-    peer_name = get_peer_name(fd);
-    if (peer_name != NULL) {
-        LOGE("failed to handshake with %s: %s", peer_name, info);
-    }
-}
-
-#ifndef __MINGW32__
-int
-setnonblocking(int fd)
+int setnonblocking(int fd)
 {
     int flags;
     if (-1 == (flags = fcntl(fd, F_GETFL, 0))) {
@@ -151,10 +93,7 @@ setnonblocking(int fd)
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-#endif
-
-int
-create_and_bind(const char *host, const char *port, int mptcp)
+int create_and_bind(const char *host, const char *port, int mptcp)
 {
     struct addrinfo hints;
     struct addrinfo *result, *rp, *ipv4v6bindall;
@@ -267,30 +206,6 @@ connect_to_remote(EV_P_ struct addrinfo *res,
 {
     printf("CONNECT TO REMOTE : SAG1\n");
     int sockfd;
-#ifdef SET_INTERFACE
-    const char *iface = server->listen_ctx->iface;
-#endif
-
-    if (acl) {
-        char ipstr[INET6_ADDRSTRLEN];
-        memset(ipstr, 0, INET6_ADDRSTRLEN);
-
-        if (res->ai_addr->sa_family == AF_INET) {
-            struct sockaddr_in s;
-            memcpy(&s, res->ai_addr, sizeof(struct sockaddr_in));
-            inet_ntop(AF_INET, &s.sin_addr, ipstr, INET_ADDRSTRLEN);
-        } else if (res->ai_addr->sa_family == AF_INET6) {
-            struct sockaddr_in6 s;
-            memcpy(&s, res->ai_addr, sizeof(struct sockaddr_in6));
-            inet_ntop(AF_INET6, &s.sin6_addr, ipstr, INET6_ADDRSTRLEN);
-        }
-
-        if (outbound_block_match_host(ipstr) == 1) {
-            if (verbose)
-                LOGI("outbound blocked %s", ipstr);
-            return NULL;
-        }
-    }
 
     // initialize remote socks
     sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
@@ -429,7 +344,6 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
     if (err == CRYPTO_ERROR)
     {
         printf("CRYPTO ERROR\n");
-        report_addr(server->fd, "authentication error");
         stop_server(EV_A_ server);
         return;
     }
@@ -512,7 +426,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
             }
             else
             {
-                report_addr(server->fd, "invalid length for ipv4 address");
+                LOGI("invalid length for ipv4 address");
                 stop_server(EV_A_ server);
                 return;
             }
@@ -528,7 +442,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
 
         if (offset == 1)
         {
-            report_addr(server->fd, "invalid address type");
+            LOGI("invalid address type");
             stop_server(EV_A_ server);
             return;
         }
@@ -539,7 +453,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
 
         if (server->buf->len < offset)
         {
-            report_addr(server->fd, "invalid request length");
+            LOGI("invalid request length");
             stop_server(EV_A_ server);
             return;
         } else {
@@ -568,7 +482,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
             remote->server = server;
 
             // XXX: should handle buffer carefully
-            if (server->buf->len > 0)
+            if (server->buf->len > 0) 
             {
                 printf("LOLO again\n");
                 brealloc(remote->buf, server->buf->len, SOCKET_BUF_SIZE);
@@ -875,10 +789,8 @@ remote_send_cb(EV_P_ ev_io *w, int revents)
 static remote_t *
 new_remote(int fd)
 {
-    if (verbose) {
-        remote_conn++;
-        LOGI("new connection to remote, %d opened remote connections", remote_conn);
-    }
+    remote_conn++;
+    printf("new_remote-%d\n", remote_conn);
 
     remote_t *remote = ss_malloc(sizeof(remote_t));
     memset(remote, 0, sizeof(remote_t));
@@ -936,10 +848,8 @@ close_and_free_remote(EV_P_ remote_t *remote)
 static server_t *
 new_server(int fd, listen_ctx_t *listener)
 {
-    if (verbose) {
-        server_conn++;
-        LOGI("new connection from client, %d opened client connections", server_conn);
-    }
+    server_conn++;
+    printf("new connection from client, %d", server_conn);
 
     server_t *server;
     server = ss_malloc(sizeof(server_t));
@@ -957,7 +867,6 @@ new_server(int fd, listen_ctx_t *listener)
     server->recv_ctx->connected = 0;
     server->send_ctx->server    = server;
     server->send_ctx->connected = 0;
-    printf("PEDAAAASSSSAG\n");
     server->stage               = STAGE_INIT;
     server->frag                = 0;
     server->query               = NULL;
@@ -1030,6 +939,7 @@ close_and_free_server(EV_P_ server_t *server)
 static void
 signal_cb(EV_P_ ev_signal *w, int revents)
 {
+    printf("signal_cb, %d", w->signum);
     if (revents & EV_SIGNAL) {
         switch (w->signum) {
 #ifndef __MINGW32__
@@ -1057,19 +967,6 @@ accept_cb(EV_P_ ev_io *w, int revents)
         ERROR("accept");
         return;
     }
-
-    char *peer_name = get_peer_name(serverfd);
-    if (peer_name != NULL) {
-        if (acl) {
-            if ((get_acl_mode() == BLACK_LIST && acl_match_host(peer_name) == 1)
-                || (get_acl_mode() == WHITE_LIST && acl_match_host(peer_name) >= 0)) {
-                LOGE("Access denied from %s", peer_name);
-                close(serverfd);
-                return;
-            }
-        }
-    }
-
     int opt = 1;
     setsockopt(serverfd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
 #ifdef SO_NOSIGPIPE
@@ -1181,10 +1078,6 @@ main(int argc, char **argv)
     if (ipv6first == 0) {
         ipv6first = conf->ipv6_first;
     }
-    if (acl == 0 && conf->acl != NULL) {
-        LOGI("initializing acl...");
-        acl = !init_acl(conf->acl);
-    }
 
     if (tcp_incoming_sndbuf != 0 && tcp_incoming_sndbuf < SOCKET_BUF_SIZE) {
         tcp_incoming_sndbuf = 0;
@@ -1259,20 +1152,16 @@ main(int argc, char **argv)
         LOGI("enable TCP no-delay");
     }
 
-#ifndef __MINGW32__
     // ignore SIGPIPE
     signal(SIGPIPE, SIG_IGN);
     signal(SIGABRT, SIG_IGN);
-#endif
 
     ev_signal_init(&sigint_watcher, signal_cb, SIGINT);
     ev_signal_init(&sigterm_watcher, signal_cb, SIGTERM);
     ev_signal_start(EV_DEFAULT, &sigint_watcher);
     ev_signal_start(EV_DEFAULT, &sigterm_watcher);
-#ifndef __MINGW32__
     ev_signal_init(&sigchld_watcher, signal_cb, SIGCHLD);
     ev_signal_start(EV_DEFAULT, &sigchld_watcher);
-#endif
 
     // setup keys
     LOGI("initializing ciphers... %s", method);
@@ -1356,7 +1245,6 @@ main(int argc, char **argv)
         }
     }
 
-#ifndef __MINGW32__
     // setuid
     if (user != NULL && !run_as(user)) {
         FATAL("failed to switch user");
@@ -1365,7 +1253,6 @@ main(int argc, char **argv)
     if (geteuid() == 0) {
         LOGI("running from root user");
     }
-#endif
 
     // Init connections
     cork_dllist_init(&connections);
@@ -1374,12 +1261,6 @@ main(int argc, char **argv)
     ev_run(loop, 0);
 
     LOGI("closed gracefully");
-
-#ifndef __MINGW32__
-    if (manager_addr != NULL) {
-        ev_timer_stop(EV_DEFAULT, &stat_update_watcher);
-    }
-#endif
 
     // Clean up
 
