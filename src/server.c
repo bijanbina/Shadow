@@ -405,6 +405,7 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
         char atyp      = server->buf->data[offset++];
         char host[255] = { 0 };
         uint16_t port  = 0;
+        int need_query = 0;
         struct addrinfo info;
         struct sockaddr_storage storage;
         memset(&info, 0, sizeof(struct addrinfo));
@@ -439,6 +440,66 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
             info.ai_addrlen  = sizeof(struct sockaddr_in);
             info.ai_addr     = (struct sockaddr *)addr;
         }
+        else if ((atyp & ADDRTYPE_MASK) == 3)
+        {
+            // Domain name
+            uint8_t name_len = *(uint8_t *)(server->buf->data + offset);
+            if (name_len + 4 <= server->buf->len)
+            {
+                memcpy(host, server->buf->data + offset + 1, name_len);
+                offset += name_len + 1;
+            }
+            else
+            {
+                LOGI("invalid host name length");
+                stop_server(EV_A_ server);
+                return;
+            }
+            host[name_len] = 0;
+            printf("[domain name] %s\n", host);
+            struct cork_ip ip;
+            if (cork_ip_init(&ip, host) != -1)
+            {
+                printf("cork_ip_init-1\n");
+                info.ai_socktype = SOCK_STREAM;
+                info.ai_protocol = IPPROTO_TCP;
+                if (ip.version == 4)
+                {
+                    struct sockaddr_in *addr = (struct sockaddr_in *)&storage;
+                    inet_pton(AF_INET, host, &(addr->sin_addr));
+                    memcpy(&addr->sin_port, server->buf->data + offset, sizeof(uint16_t));
+                    addr->sin_family = AF_INET;
+                    info.ai_family   = AF_INET;
+                    info.ai_addrlen  = sizeof(struct sockaddr_in);
+                    info.ai_addr     = (struct sockaddr *)addr;
+                }
+                else if (ip.version == 6)
+                {
+                    struct sockaddr_in6 *addr = (struct sockaddr_in6 *)&storage;
+                    inet_pton(AF_INET6, host, &(addr->sin6_addr));
+                    memcpy(&addr->sin6_port, server->buf->data + offset, sizeof(uint16_t));
+                    addr->sin6_family = AF_INET6;
+                    info.ai_family    = AF_INET6;
+                    info.ai_addrlen   = sizeof(struct sockaddr_in6);
+                    info.ai_addr      = (struct sockaddr *)addr;
+                }
+            }
+            else
+            {
+                printf("cork ip failed\n");
+                if (!validate_hostname(host, name_len))
+                {
+                    LOGI("invalid host name");
+                    stop_server(EV_A_ server);
+                    return;
+                }
+                need_query = 1;
+            }
+        }
+        else
+        {
+            printf(">>> invalid address type, %c\n", atyp);
+        }
 
         if (offset == 1)
         {
@@ -468,35 +529,50 @@ server_recv_cb(EV_P_ ev_io *w, int revents)
                 LOGI("[%s] connect to %s:%d", remote_port, host, ntohs(port));
         }
 
-        remote_t *remote = connect_to_remote(EV_A_ & info, server);
-
-        if (remote == NULL)
+        if (!need_query)
         {
-            LOGE("connect error");
-            close_and_free_server(EV_A_ server);
-            return;
+            remote_t *remote = connect_to_remote(EV_A_ & info, server);
+            if (remote == NULL)
+            {
+                LOGE("connect error : ??????????????");
+                close_and_free_server(EV_A_ server);
+                return;
+            }
+            else
+            {
+                server->remote = remote;
+                remote->server = server;
+
+                // XXX: should handle buffer carefully
+                if (server->buf->len > 0)
+                {
+                    printf("LOLO again\n");
+                    brealloc(remote->buf, server->buf->len, SOCKET_BUF_SIZE);
+                    memcpy(remote->buf->data, server->buf->data + server->buf->idx,
+                           server->buf->len);
+                    remote->buf->len = server->buf->len;
+                    remote->buf->idx = 0;
+                    server->buf->len = 0;
+                    server->buf->idx = 0;
+                }
+
+                // waiting on remote connected event
+                ev_io_stop(EV_A_ & server_recv_ctx->io);
+                ev_io_start(EV_A_ & remote->send_ctx->io);
+            }
         }
         else
         {
-            server->remote = remote;
-            remote->server = server;
-
-            // XXX: should handle buffer carefully
-            if (server->buf->len > 0) 
-            {
-                printf("LOLO again\n");
-                brealloc(remote->buf, server->buf->len, SOCKET_BUF_SIZE);
-                memcpy(remote->buf->data, server->buf->data + server->buf->idx,
-                        server->buf->len);
-                remote->buf->len = server->buf->len;
-                remote->buf->idx = 0;
-                server->buf->len = 0;
-                server->buf->idx = 0;
-            }
-
-            // waiting on remote connected event
             ev_io_stop(EV_A_ & server_recv_ctx->io);
-            ev_io_start(EV_A_ & remote->send_ctx->io);
+
+            query_t *query = ss_malloc(sizeof(query_t));
+            memset(query, 0, sizeof(query_t));
+            query->server = server;
+            server->query = query;
+            snprintf(query->hostname, MAX_HOSTNAME_LEN, "%s", host);
+
+            server->stage = STAGE_RESOLVE;
+            resolv_start(host, port, resolv_cb, resolv_free_cb, query);
         }
 
         return;
@@ -554,6 +630,76 @@ server_send_cb(EV_P_ ev_io *w, int revents)
                 close_and_free_server(EV_A_ server);
                 return;
             }
+        }
+    }
+}
+
+static void
+resolv_free_cb(void *data)
+{
+    query_t *query = (query_t *)data;
+
+    if (query != NULL) {
+        if (query->server != NULL)
+            query->server->query = NULL;
+        ss_free(query);
+    }
+}
+
+static void
+resolv_cb(struct sockaddr *addr, void *data)
+{
+    query_t *query   = (query_t *)data;
+    server_t *server = query->server;
+
+    if (server == NULL)
+        return;
+
+    struct ev_loop *loop = server->listen_ctx->loop;
+
+    if (addr == NULL) {
+        LOGE("unable to resolve %s", query->hostname);
+        close_and_free_server(EV_A_ server);
+    } else {
+        if (verbose) {
+            LOGI("successfully resolved %s", query->hostname);
+        }
+
+        struct addrinfo info;
+        memset(&info, 0, sizeof(struct addrinfo));
+        info.ai_socktype = SOCK_STREAM;
+        info.ai_protocol = IPPROTO_TCP;
+        info.ai_addr     = addr;
+
+        if (addr->sa_family == AF_INET) {
+            info.ai_family  = AF_INET;
+            info.ai_addrlen = sizeof(struct sockaddr_in);
+        } else if (addr->sa_family == AF_INET6) {
+            info.ai_family  = AF_INET6;
+            info.ai_addrlen = sizeof(struct sockaddr_in6);
+        }
+
+        remote_t *remote = connect_to_remote(EV_A_ & info, server);
+
+        if (remote == NULL) {
+            close_and_free_server(EV_A_ server);
+        } else {
+            server->remote = remote;
+            remote->server = server;
+
+            // XXX: should handle buffer carefully
+            if (server->buf->len > 0) {
+                brealloc(remote->buf, server->buf->len, SOCKET_BUF_SIZE);
+                memcpy(remote->buf->data, server->buf->data + server->buf->idx,
+                       server->buf->len);
+                remote->buf->len = server->buf->len;
+                remote->buf->idx = 0;
+                server->buf->len = 0;
+                server->buf->idx = 0;
+            }
+
+            // listen to remote connected event
+            ev_io_start(EV_A_ & remote->send_ctx->io);
         }
     }
 }
