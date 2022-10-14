@@ -1,25 +1,3 @@
-/*
- * winsock.h - Windows socket compatibility layer
- *
- * Copyright (C) 2013 - 2019, Max Lv <max.c.lv@gmail.com>
- *
- * This file is part of the shadowsocks-libev.
- *
- * shadowsocks-libev is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * shadowsocks-libev is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with shadowsocks-libev; see the file COPYING. If not, see
- * <http://www.gnu.org/licenses/>.
- */
-
 #ifndef _WINSOCK_H
 #define _WINSOCK_H
 
@@ -28,10 +6,6 @@
 // Target NT6
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
-#endif
-
-#if defined(_WIN32_WINNT) && _WIN32_WINNT < 0x0600
-#undef _WIN32_WINNT
 #endif
 
 #ifndef _WIN32_WINNT
@@ -45,40 +19,17 @@
 #include <mswsock.h>
 
 // Override POSIX error number
-#ifdef errno
-#undef errno
-#endif
 #define errno WSAGetLastError()
 
-#ifdef EWOULDBLOCK
-#undef EWOULDBLOCK
-#endif
 #define EWOULDBLOCK WSAEWOULDBLOCK
 
-#ifdef CONNECT_IN_PROGRESS
-#undef CONNECT_IN_PROGRESS
-#endif
 #define CONNECT_IN_PROGRESS WSAEWOULDBLOCK
 
-#ifdef EOPNOTSUPP
-#undef EOPNOTSUPP
-#endif
 #define EOPNOTSUPP WSAEOPNOTSUPP
 
-#ifdef EPROTONOSUPPORT
-#undef EPROTONOSUPPORT
-#endif
 #define EPROTONOSUPPORT WSAEPROTONOSUPPORT
 
-#ifdef ENOPROTOOPT
-#undef ENOPROTOOPT
-#endif
 #define ENOPROTOOPT WSAENOPROTOOPT
-
-// Check if ConnectEx supported in header
-#ifdef WSAID_CONNECTEX
-// Hardcode TCP fast open option
-
 
 // Override close function
 #define close(fd) closesocket(fd)
@@ -108,10 +59,6 @@ char *ss_gai_strerror(int ecode);
 int setnonblocking(SOCKET socket);
 void winsock_init(void);
 void winsock_cleanup(void);
-#ifdef TCP_FASTOPEN_WINSOCK
-LPFN_CONNECTEX winsock_getconnectex(void);
-int winsock_dummybind(SOCKET fd, struct sockaddr *sa);
-#endif
 
 #endif // __MINGW32__
 

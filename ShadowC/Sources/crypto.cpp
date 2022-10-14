@@ -30,7 +30,6 @@
 #include "crypto.h"
 #include "stream.h"
 #include "utils.h"
-#include "ppbloom.h"
 
 int
 balloc(buffer_t *ptr, size_t capacity)

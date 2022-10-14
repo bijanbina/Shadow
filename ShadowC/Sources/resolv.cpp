@@ -32,25 +32,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
-#ifndef __MINGW32__
-#include <netdb.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <unistd.h>
-#else
 #include "winsock.h" // Should be before <ares.h>
-#endif
 #include <ares.h>
-
-#ifdef HAVE_LIBEV_EV_H
-#include <libev/ev.h>
-#else
-#include <ev.h>
-#endif
-
-#include <libcork/core.h>
-
 #include "resolv.h"
 #include "utils.h"
 #include "netutils.h"

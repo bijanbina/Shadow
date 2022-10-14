@@ -24,53 +24,12 @@
 #include "config.h"
 #endif
 
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/version.h>
 #define CIPHER_UNSUPPORTED "unsupported"
 
-#include <sodium.h>
-
-#include "ppbloom.h"
 #include "stream.h"
 #include "utils.h"
 
 #define SODIUM_BLOCK_SIZE   64
-
-/*
- * Spec: http://shadowsocks.org/en/spec/Stream-Ciphers.html
- *
- * Stream ciphers provide only confidentiality. Data integrity and authenticity is not guaranteed. Users should use AEAD
- * ciphers whenever possible.
- *
- * Stream Encryption/Decryption
- *
- * Stream_encrypt is a function that takes a secret key, an initialization vector, a message, and produces a ciphertext
- * with the same length as the message.
- *
- *      Stream_encrypt(key, IV, message) => ciphertext
- *
- * Stream_decrypt is a function that takes a secret key, an initializaiton vector, a ciphertext, and produces the
- * original message.
- *
- *      Stream_decrypt(key, IV, ciphertext) => message
- *
- * TCP
- *
- * A stream cipher encrypted TCP stream starts with a randomly generated initializaiton vector, followed by encrypted
- * payload data.
- *
- *      [IV][encrypted payload]
- *
- * UDP
- *
- * A stream cipher encrypted UDP packet has the following structure:
- *
- *      [IV][encrypted payload]
- *
- * Each UDP packet is encrypted/decrypted independently with a randomly generated initialization vector.
- *
- */
 
 #define NONE                -1
 #define TABLE               0

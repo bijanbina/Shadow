@@ -45,14 +45,11 @@ UI_DIR = Build/.ui
 
 HEADERS += \
     Sources/base64.h \
-    Sources/cache.h \
     Sources/common.h \
     Sources/crypto.h \
-    Sources/jconf.h \
     Sources/local.h \
     Sources/netutils.h \
     Sources/plusaes/plusaes.hpp \
-    Sources/ppbloom.h \
     Sources/resolv.h \
     Sources/rule.h \
     Sources/shadowsocks.h \
@@ -64,12 +61,9 @@ HEADERS += \
 
 SOURCES += \
     Sources/base64.cpp \
-    Sources/cache.cpp \
     Sources/crypto.cpp \
-    Sources/jconf.cpp \
     Sources/local.cpp \
     Sources/netutils.cpp \
-    Sources/ppbloom.cpp \
     Sources/resolv.cpp \
     Sources/rule.cpp \
     Sources/stream.cpp \

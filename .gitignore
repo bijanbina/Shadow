@@ -98,3 +98,13 @@ doc/*.html
 # Visual Studio Code
 .vscode/*
 .devcontainer/*
+
+*.stash
+
+ShadowC/Makefile
+
+*.Release
+
+*.Debug
+
+*.user

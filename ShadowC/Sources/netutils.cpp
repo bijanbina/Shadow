@@ -22,8 +22,6 @@
 
 #include <math.h>
 
-#include <libcork/core.h>
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -71,48 +69,6 @@ get_sockaddr_len(struct sockaddr *addr)
     return 0;
 }
 
-#ifdef SET_INTERFACE
-int
-setinterface(int socket_fd, const char *interface_name)
-{
-    struct ifreq interface;
-    memset(&interface, 0, sizeof(struct ifreq));
-    strncpy(interface.ifr_name, interface_name, IFNAMSIZ - 1);
-    int res = setsockopt(socket_fd, SOL_SOCKET, SO_BINDTODEVICE, &interface,
-                         sizeof(struct ifreq));
-    return res;
-}
-
-#endif
-
-int
-parse_local_addr(struct sockaddr_storage *storage_v4,
-                 struct sockaddr_storage *storage_v6,
-                 const char *host)
-{
-    if (host != NULL) {
-        struct cork_ip ip;
-        if (cork_ip_init(&ip, host) != -1) {
-            if (ip.version == 4) {
-                memset(storage_v4, 0, sizeof(struct sockaddr_storage));
-                struct sockaddr_in *addr = (struct sockaddr_in *)storage_v4;
-                inet_pton(AF_INET, host, &addr->sin_addr);
-                addr->sin_family = AF_INET;
-                LOGI("binding to outbound IPv4 addr: %s", host);
-                return AF_INET;
-            } else if (ip.version == 6) {
-                memset(storage_v6, 0, sizeof(struct sockaddr_storage));
-                struct sockaddr_in6 *addr = (struct sockaddr_in6 *)storage_v6;
-                inet_pton(AF_INET6, host, &addr->sin6_addr);
-                addr->sin6_family = AF_INET6;
-                LOGI("binding to outbound IPv6 addr: %s", host);
-                return AF_INET6;
-            }
-        }
-    }
-    return 0;
-}
-
 int
 bind_to_addr(struct sockaddr_storage *storage,
              int socket_fd)
@@ -122,80 +78,6 @@ bind_to_addr(struct sockaddr_storage *storage,
     } else if (storage->ss_family == AF_INET6) {
         return bind(socket_fd, (struct sockaddr *)storage, sizeof(struct sockaddr_in6));
     }
-    return -1;
-}
-
-ssize_t
-get_sockaddr(char *host, char *port,
-             struct sockaddr_storage *storage, int block,
-             int ipv6first)
-{
-    struct cork_ip ip;
-    if (cork_ip_init(&ip, host) != -1) {
-        if (ip.version == 4) {
-            struct sockaddr_in *addr = (struct sockaddr_in *)storage;
-            addr->sin_family = AF_INET;
-            inet_pton(AF_INET, host, &(addr->sin_addr));
-            if (port != NULL) {
-                addr->sin_port = htons(atoi(port));
-            }
-        } else if (ip.version == 6) {
-            struct sockaddr_in6 *addr = (struct sockaddr_in6 *)storage;
-            addr->sin6_family = AF_INET6;
-            inet_pton(AF_INET6, host, &(addr->sin6_addr));
-            if (port != NULL) {
-                addr->sin6_port = htons(atoi(port));
-            }
-        }
-        return 0;
-    } else {
-#ifdef __ANDROID__
-        extern int vpn;
-        assert(!vpn);   // protecting DNS packets isn't supported yet
-#endif
-        struct addrinfo hints;
-        struct addrinfo *result, *rp;
-
-        memset(&hints, 0, sizeof(struct addrinfo));
-        hints.ai_family   = AF_UNSPEC;   /* Return IPv4 and IPv6 choices */
-        hints.ai_socktype = SOCK_STREAM; /* We want a TCP socket */
-
-        int err = getaddrinfo(host, port, &hints, &result);
-
-        if (err != 0) {
-            LOGE("getaddrinfo: %s", gai_strerror(err));
-            return -1;
-        }
-
-        int prefer_af = ipv6first ? AF_INET6 : AF_INET;
-        for (rp = result; rp != NULL; rp = rp->ai_next)
-            if (rp->ai_family == prefer_af) {
-                if (rp->ai_family == AF_INET)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in));
-                else if (rp->ai_family == AF_INET6)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in6));
-                break;
-            }
-
-        if (rp == NULL) {
-            for (rp = result; rp != NULL; rp = rp->ai_next) {
-                if (rp->ai_family == AF_INET)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in));
-                else if (rp->ai_family == AF_INET6)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in6));
-                break;
-            }
-        }
-
-        if (rp == NULL) {
-            LOGE("failed to resolve remote addr");
-            return -1;
-        }
-
-        freeaddrinfo(result);
-        return 0;
-    }
-
     return -1;
 }
 
@@ -294,22 +176,5 @@ validate_hostname(const char *hostname, const int hostname_len)
         label += label_len + 1;
     }
 
-    return 1;
-}
-
-int
-is_ipv6only(ss_addr_t *servers, size_t server_num, int ipv6first)
-{
-    int i;
-    for (i = 0; i < server_num; i++) {
-        struct sockaddr_storage storage;
-        memset(&storage, 0, sizeof(struct sockaddr_storage));
-        if (get_sockaddr(servers[i].host, servers[i].port, &storage, 1, ipv6first) == -1) {
-            FATAL("failed to resolve the provided hostname");
-        }
-        if (storage.ss_family != AF_INET6) {
-            return 0;
-        }
-    }
     return 1;
 }

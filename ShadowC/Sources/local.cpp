@@ -1,25 +1,3 @@
-/*
- * local.c - Setup a socks5 proxy through remote shadowsocks server
- *
- * Copyright (C) 2013 - 2019, Max Lv <max.c.lv@gmail.com>
- *
- * This file is part of the shadowsocks-libev.
- *
- * shadowsocks-libev is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * shadowsocks-libev is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with shadowsocks-libev; see the file COPYING. If not, see
- * <http://www.gnu.org/licenses/>.
- */
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -41,13 +19,13 @@
 #include "local.h"
 #include "winsock.h"
 
-
+#define MAX_CONNECT_TIMEOUT 10
+#define MAX_REMOTE_NUM 10
 #ifndef EAGAIN
 #define EAGAIN EWOULDBLOCK
 #endif
 
 int verbose    = 0;
-int reuse_port = 0;
 int tcp_incoming_sndbuf = 0;
 int tcp_incoming_rcvbuf = 0;
 int tcp_outgoing_sndbuf = 0;
@@ -55,21 +33,12 @@ int tcp_outgoing_rcvbuf = 0;
 
 static crypto_t *crypto;
 
-static int acl       = 0;
-static int mode      = TCP_ONLY;
+static int mode      = 0;
 static int ipv6first = 0;
 int fast_open        = 0;
 static int no_delay  = 0;
 static int udp_fd    = 0;
 static int ret_val   = 0;
-
-#ifndef LIB_ONLY
-static struct plugin_watcher_t {
-    SOCKET fd;
-    uint16_t port;
-    int valid;
-} plugin_watcher;
-#endif
 
 
 static int create_and_bind(const char *addr, const char *port);
@@ -110,19 +79,6 @@ create_and_bind(const char *addr, const char *port)
         if (listen_sock == -1) {
             continue;
         }
-
-        int opt = 1;
-        setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#ifdef SO_NOSIGPIPE
-        setsockopt(listen_sock, SOL_SOCKET, SO_NOSIGPIPE, &opt, sizeof(opt));
-#endif
-        if (reuse_port) {
-            int err = set_reuseport(listen_sock);
-            if (err == 0) {
-                LOGI("tcp port reuse enabled");
-            }
-        }
-
         s = bind(listen_sock, rp->ai_addr, rp->ai_addrlen);
         if (s == 0) {
             /* We managed to bind successfully! */
@@ -146,13 +102,13 @@ delayed_connect_cb(int revents)
 //    server_t *server = cork_container_of(watcher, server_t,
 //                                         delayed_connect_watcher);
 
-    server_recv_cb(revents);
+//    server_recv_cb(revents);
 }
 
 static int
 server_handshake_reply(int udp_assc, struct socks5_response *response)
 {
-    server_ctx_t *server_recv_ctx = (server_ctx_t *)w;
+    server_ctx_t *server_recv_ctx = NULL; //(server_ctx_t *)w;
     server_t *server              = server_recv_ctx->server;
     remote_t *remote              = server->remote;
     if (server->stage != STAGE_HANDSHAKE)
@@ -204,7 +160,7 @@ server_handshake_reply(int udp_assc, struct socks5_response *response)
 static int
 server_handshake(buffer_t *buf)
 {
-    server_ctx_t *server_recv_ctx = (server_ctx_t *)w;
+    server_ctx_t *server_recv_ctx = NULL;// (server_ctx_t *)w;
     server_t *server              = server_recv_ctx->server;
     remote_t *remote              = server->remote;
 
@@ -245,56 +201,39 @@ server_handshake(buffer_t *buf)
     int atyp = request->atyp;
 
     // get remote addr and port
-    if (atyp == SOCKS5_ATYP_IPV4) {
+    if (atyp == SOCKS5_ATYP_IPV4)
+    {
         size_t in_addr_len = sizeof(struct in_addr);
-        if (buf->len < request_len + in_addr_len + 2) {
+        if (buf->len < request_len + in_addr_len + 2)
+        {
             return -1;
         }
         memcpy(abuf->data + abuf->len, buf->data + request_len, in_addr_len + 2);
         abuf->len += in_addr_len + 2;
-
-        if (acl || verbose) {
-            uint16_t p = load16_be(buf->data + request_len + in_addr_len);
-            if (!inet_ntop(AF_INET, (const void *)(buf->data + request_len),
-                           ip, INET_ADDRSTRLEN)) {
-                LOGI("inet_ntop(AF_INET): %s", strerror(errno));
-                ip[0] = '\0';
-            }
-            sprintf(port, "%d", p);
-        }
-    } else if (atyp == SOCKS5_ATYP_DOMAIN) {
+    }
+    else if (atyp == SOCKS5_ATYP_DOMAIN)
+    {
         uint8_t name_len = *(uint8_t *)(buf->data + request_len);
-        if (buf->len < request_len + 1 + name_len + 2) {
+        if (buf->len < request_len + 1 + name_len + 2)
+        {
             return -1;
         }
         abuf->data[abuf->len++] = name_len;
         memcpy(abuf->data + abuf->len, buf->data + request_len + 1, name_len + 2);
         abuf->len += name_len + 2;
-
-        if (acl || verbose) {
-            uint16_t p = load16_be(buf->data + request_len + 1 + name_len);
-            memcpy(host, buf->data + request_len + 1, name_len);
-            host[name_len] = '\0';
-            sprintf(port, "%d", p);
-        }
-    } else if (atyp == SOCKS5_ATYP_IPV6) {
+    }
+    else if (atyp == SOCKS5_ATYP_IPV6)
+    {
         size_t in6_addr_len = sizeof(struct in6_addr);
-        if (buf->len < request_len + in6_addr_len + 2) {
+        if (buf->len < request_len + in6_addr_len + 2)
+        {
             return -1;
         }
         memcpy(abuf->data + abuf->len, buf->data + request_len, in6_addr_len + 2);
         abuf->len += in6_addr_len + 2;
-
-        if (acl || verbose) {
-            uint16_t p = load16_be(buf->data + request_len + in6_addr_len);
-            if (!inet_ntop(AF_INET6, (const void *)(buf->data + request_len),
-                           ip, INET6_ADDRSTRLEN)) {
-                LOGI("inet_ntop(AF_INET6): %s", strerror(errno));
-                ip[0] = '\0';
-            }
-            sprintf(port, "%d", p);
-        }
-    } else {
+    }
+    else
+    {
         LOGE("unsupported addrtype: %d", request->atyp);
         response.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
         char *send_buf = (char *)&response;
@@ -308,7 +247,8 @@ server_handshake(buffer_t *buf)
     server->stage = STAGE_STREAM;
 
     buf->len -= (3 + abuf->len);
-    if (buf->len > 0) {
+    if (buf->len > 0)
+    {
         memmove(buf->data, buf->data + 3 + abuf->len, buf->len);
     }
 
@@ -318,7 +258,6 @@ server_handshake(buffer_t *buf)
         LOGI("connect to %s:%s", ip, port);
     else if (atyp == SOCKS5_ATYP_IPV6)
         LOGI("connect to [%s]:%s", ip, port);
-not_bypass:
     // Not bypass
     if (remote == NULL) {
         remote = create_remote(server->listener, NULL, 0);
@@ -361,7 +300,7 @@ not_bypass:
 static void
 server_stream(buffer_t *buf)
 {
-    server_ctx_t *server_recv_ctx = (server_ctx_t *)w;
+    server_ctx_t *server_recv_ctx = NULL;//(server_ctx_t *)w;
     server_t *server              = server_recv_ctx->server;
     remote_t *remote              = server->remote;
 
@@ -438,7 +377,7 @@ server_stream(buffer_t *buf)
 static void
 server_recv_cb(int revents)
 {
-    server_ctx_t *server_recv_ctx = (server_ctx_t *)w;
+    server_ctx_t *server_recv_ctx = NULL; //(server_ctx_t *)w;
     server_t *server              = server_recv_ctx->server;
     remote_t *remote              = server->remote;
     buffer_t *buf;
@@ -452,18 +391,25 @@ server_recv_cb(int revents)
         buf = remote->buf;
     }
 
-    if (revents != EV_TIMER) {
+    if (revents != 0/*EV_TIMER*/)
+    {
         r = recv(server->fd, buf->data + buf->len, SOCKET_BUF_SIZE - buf->len, 0);
 
-        if (r == 0) {
+        if (r == 0)
+        {
             // connection closed
             return;
-        } else if (r == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        }
+        else if (r == -1)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
                 // no data
                 // continue to wait for recv
                 return;
-            } else {
+            }
+            else
+            {
                 if (verbose)
                     ERROR("server_recv_cb_recv");
                 return;
@@ -537,7 +483,7 @@ server_recv_cb(int revents)
 static void
 server_send_cb(int revents)
 {
-    server_ctx_t *server_send_ctx = (server_ctx_t *)w;
+    server_ctx_t *server_send_ctx = NULL;//(server_ctx_t *)w;
     server_t *server              = server_send_ctx->server;
     remote_t *remote              = server->remote;
     if (server->buf->len == 0) {
@@ -573,7 +519,7 @@ server_send_cb(int revents)
 static void
 remote_timeout_cb(int revents)
 {
-    remote_ctx_t *remote_ctx = cork_container_of(watcher, remote_ctx_t, watcher);
+    remote_ctx_t *remote_ctx = NULL;// cork_container_of(watcher, remote_ctx_t, watcher);
 
     remote_t *remote = remote_ctx->remote;
     server_t *server = remote->server;
@@ -586,7 +532,7 @@ remote_timeout_cb(int revents)
 static void
 remote_recv_cb(int revents)
 {
-    remote_ctx_t *remote_recv_ctx = (remote_ctx_t *)w;
+    remote_ctx_t *remote_recv_ctx = NULL;//(remote_ctx_t *)w;
     remote_t *remote              = remote_recv_ctx->remote;
     server_t *server              = remote->server;
 
@@ -647,7 +593,7 @@ remote_recv_cb(int revents)
 static void
 remote_send_cb(int revents)
 {
-    remote_ctx_t *remote_send_ctx = (remote_ctx_t *)w;
+    remote_ctx_t *remote_send_ctx = NULL;//(remote_ctx_t *)w;
     remote_t *remote              = remote_send_ctx->remote;
     server_t *server              = remote->server;
 
@@ -707,13 +653,13 @@ static remote_t *
 new_remote(int fd, int timeout)
 {
     remote_t *remote;
-    remote = ss_malloc(sizeof(remote_t));
+    remote = (remote_t *)malloc(sizeof(remote_t));
 
     memset(remote, 0, sizeof(remote_t));
 
-    remote->buf      = ss_malloc(sizeof(buffer_t));
-    remote->recv_ctx = ss_malloc(sizeof(remote_ctx_t));
-    remote->send_ctx = ss_malloc(sizeof(remote_ctx_t));
+    remote->buf      = (buffer_t *)malloc(sizeof(buffer_t));
+    remote->recv_ctx = (remote_ctx_t *)malloc(sizeof(remote_ctx_t));
+    remote->send_ctx = (remote_ctx_t *)malloc(sizeof(remote_ctx_t));
     balloc(remote->buf, SOCKET_BUF_SIZE);
     memset(remote->recv_ctx, 0, sizeof(remote_ctx_t));
     memset(remote->send_ctx, 0, sizeof(remote_ctx_t));
@@ -751,14 +697,14 @@ static server_t *
 new_server(int fd)
 {
     server_t *server;
-    server = ss_malloc(sizeof(server_t));
+    server = (server_t *)malloc(sizeof(server_t));
 
     memset(server, 0, sizeof(server_t));
 
-    server->recv_ctx = ss_malloc(sizeof(server_ctx_t));
-    server->send_ctx = ss_malloc(sizeof(server_ctx_t));
-    server->buf      = ss_malloc(sizeof(buffer_t));
-    server->abuf     = ss_malloc(sizeof(buffer_t));
+    server->recv_ctx = (server_ctx_t *)malloc(sizeof(server_ctx_t));
+    server->send_ctx = (server_ctx_t *)malloc(sizeof(server_ctx_t));
+    server->buf      = (buffer_t *)malloc(sizeof(buffer_t));
+    server->abuf     = (buffer_t *)malloc(sizeof(buffer_t));
     balloc(server->buf, SOCKET_BUF_SIZE);
     balloc(server->abuf, SOCKET_BUF_SIZE);
     memset(server->recv_ctx, 0, sizeof(server_ctx_t));
@@ -770,8 +716,8 @@ new_server(int fd)
     server->recv_ctx->server    = server;
     server->send_ctx->server    = server;
 
-    server->e_ctx = ss_malloc(sizeof(cipher_ctx_t));
-    server->d_ctx = ss_malloc(sizeof(cipher_ctx_t));
+    server->e_ctx = (cipher_ctx_t *)malloc(sizeof(cipher_ctx_t));
+    server->d_ctx = (cipher_ctx_t *)malloc(sizeof(cipher_ctx_t));
     crypto->ctx_init(crypto->cipher, server->e_ctx, 1);
     crypto->ctx_init(crypto->cipher, server->d_ctx, 0);
 
@@ -887,26 +833,10 @@ create_remote(listen_ctx_t *listener,
     return remote;
 }
 
-static void
-signal_cb(int revents)
-{
-    if (revents) {
-        switch (w->signum) {
-        case SIGINT:
-        case SIGTERM:
-            ;
-//            ev_signal_stop(EV_DEFAULT, &sigint_watcher);
-//            ev_signal_stop(EV_DEFAULT, &sigterm_watcher);
-
-//            ev_io_stop(EV_DEFAULT, &plugin_watcher.io);
-        }
-    }
-}
-
 void
 accept_cb(int revents)
 {
-    listen_ctx_t *listener = (listen_ctx_t *)w;
+    listen_ctx_t *listener = NULL; //(listen_ctx_t *)w;
     int serverfd           = accept(listener->fd, NULL, NULL);
     if (serverfd == -1) {
         ERROR("accept");
@@ -935,7 +865,6 @@ main(int argc, char **argv)
     int pid_flags    = 0;
     int mtu          = 0;
     int mptcp        = 0;
-    char *user       = NULL;
     char *local_port = NULL;
     char *local_addr = NULL;
     char *password   = NULL;
@@ -946,10 +875,7 @@ main(int argc, char **argv)
     char *conf_path  = NULL;
     char *iface      = NULL;
 
-    char *plugin      = NULL;
-    char *plugin_opts = NULL;
-    char *plugin_host = NULL;
-    char *plugin_port = NULL;
+
     char tmp_port[8];
 
     int remote_num = 0;
@@ -959,157 +885,29 @@ main(int argc, char **argv)
     memset(remote_addr, 0, sizeof(ss_addr_t) * MAX_REMOTE_NUM);
     srand(time(NULL));
 
-    static struct option long_options[] = {
-        { "reuse-port",  no_argument,       NULL, GETOPT_VAL_REUSE_PORT  },
-        { "tcp-incoming-sndbuf", required_argument, NULL, GETOPT_VAL_TCP_INCOMING_SNDBUF },
-        { "tcp-incoming-rcvbuf", required_argument, NULL, GETOPT_VAL_TCP_INCOMING_RCVBUF },
-        { "tcp-outgoing-sndbuf", required_argument, NULL, GETOPT_VAL_TCP_OUTGOING_SNDBUF },
-        { "tcp-outgoing-rcvbuf", required_argument, NULL, GETOPT_VAL_TCP_OUTGOING_RCVBUF },
-        { "fast-open",   no_argument,       NULL, GETOPT_VAL_FAST_OPEN   },
-        { "no-delay",    no_argument,       NULL, GETOPT_VAL_NODELAY     },
-        { "acl",         required_argument, NULL, GETOPT_VAL_ACL         },
-        { "mtu",         required_argument, NULL, GETOPT_VAL_MTU         },
-        { "mptcp",       no_argument,       NULL, GETOPT_VAL_MPTCP       },
-        { "plugin",      required_argument, NULL, GETOPT_VAL_PLUGIN      },
-        { "plugin-opts", required_argument, NULL, GETOPT_VAL_PLUGIN_OPTS },
-        { "password",    required_argument, NULL, GETOPT_VAL_PASSWORD    },
-        { "key",         required_argument, NULL, GETOPT_VAL_KEY         },
-        { "help",        no_argument,       NULL, GETOPT_VAL_HELP        },
-        { NULL,          0,                 NULL, 0                      }
-    };
-
     opterr = 0;
 
     USE_TTY();
-    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:n:huUv6A", long_options, NULL)) != -1)
-    {
-        switch (c) {
-        case GETOPT_VAL_KEY:
-            key = optarg;
-            break;
-        case GETOPT_VAL_REUSE_PORT:
-            reuse_port = 1;
-            break;
-        case 's':
-            if (remote_num < MAX_REMOTE_NUM)
-            {
-                parse_addr(optarg, &remote_addr[remote_num++]);
-            }
-            break;
-        case 'p':
-            remote_port = optarg;
-            break;
-        case 'l':
-            local_port = optarg;
-            break;
-        case GETOPT_VAL_PASSWORD:
-        case 'k':
-            password = optarg;
-            break;
-        case 'f':
-            pid_flags = 1;
-            pid_path  = optarg;
-            break;
-        case 't':
-            timeout = optarg;
-            break;
-        case 'm':
-            method = optarg;
-            break;
-        case 'b':
-            local_addr = optarg;
-            break;
-        case 'a':
-            user = optarg;
-            break;
-        }
-    }
-    if (conf_path != NULL) {
-        jconf_t *conf = read_jconf(conf_path);
-        if (remote_num == 0) {
-            remote_num = conf->remote_num;
-            for (i = 0; i < remote_num; i++)
-                remote_addr[i] = conf->remote_addr[i];
-        }
-        if (remote_port == NULL) {
-            remote_port = conf->remote_port;
-        }
-        if (local_addr == NULL) {
-            local_addr = conf->local_addr;
-        }
-        if (local_port == NULL) {
-            local_port = conf->local_port;
-        }
-        if (password == NULL) {
-            password = conf->password;
-        }
-        if (key == NULL) {
-            key = conf->key;
-        }
-        if (method == NULL) {
-            method = conf->method;
-        }
-        if (timeout == NULL) {
-            timeout = conf->timeout;
-        }
-        if (reuse_port == 0) {
-            reuse_port = conf->reuse_port;
-        }
-        if (mode == TCP_ONLY) {
-            mode = conf->mode;
-        }
-    }
+    local_port = "1088";
+    remote_port = "7801";
+    password = "pass";
+    method = "aes-256-cfb";
+    remote_addr[0].host = "85.10.139.67";
+    remote_addr[0].port = NULL;
+    remote_num++;
+//    timeout = 100;
 
-#ifdef __MINGW32__
     winsock_init();
-#endif
-
-    if (tcp_incoming_sndbuf != 0 && tcp_incoming_sndbuf < SOCKET_BUF_SIZE) {
-        tcp_incoming_sndbuf = 0;
-    }
-
-    if (tcp_incoming_sndbuf != 0) {
-        LOGI("set TCP incoming connection send buffer size to %d", tcp_incoming_sndbuf);
-    }
-
-    if (tcp_incoming_rcvbuf != 0 && tcp_incoming_rcvbuf < SOCKET_BUF_SIZE) {
-        tcp_incoming_rcvbuf = 0;
-    }
-
-    if (tcp_incoming_rcvbuf != 0) {
-        LOGI("set TCP incoming connection receive buffer size to %d", tcp_incoming_rcvbuf);
-    }
-
-    if (tcp_outgoing_sndbuf != 0 && tcp_outgoing_sndbuf < SOCKET_BUF_SIZE) {
-        tcp_outgoing_sndbuf = 0;
-    }
-
-    if (tcp_outgoing_sndbuf != 0) {
-        LOGI("set TCP outgoing connection send buffer size to %d", tcp_outgoing_sndbuf);
-    }
-
-    if (tcp_outgoing_rcvbuf != 0 && tcp_outgoing_rcvbuf < SOCKET_BUF_SIZE) {
-        tcp_outgoing_rcvbuf = 0;
-    }
-
-    if (tcp_outgoing_rcvbuf != 0) {
-        LOGI("set TCP outgoing connection receive buffer size to %d", tcp_outgoing_rcvbuf);
-    }
 
     // Init connections
 //    cork_dllist_init(&connections);
 
 
-    if (mode != UDP_ONLY)
-    {
-        for (i = 0; i < listen_ctx.remote_num; i++)
-            ss_free(listen_ctx.remote_addr[i]);
-        ss_free(listen_ctx.remote_addr);
-    }
+//    for (i = 0; i < listen_ctx.remote_num; i++)
+//        ss_free(listen_ctx.remote_addr[i]);
+//    ss_free(listen_ctx.remote_addr);
 
-#ifdef __MINGW32__
     winsock_cleanup();
-#endif
 
     return ret_val;
 }
