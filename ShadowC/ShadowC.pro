@@ -50,8 +50,6 @@ HEADERS += \
     Sources/local.h \
     Sources/netutils.h \
     Sources/plusaes/plusaes.hpp \
-    Sources/resolv.h \
-    Sources/rule.h \
     Sources/shadowsocks.h \
     Sources/socks5.h \
     Sources/stream.h \
@@ -64,8 +62,6 @@ SOURCES += \
     Sources/crypto.cpp \
     Sources/local.cpp \
     Sources/netutils.cpp \
-    Sources/resolv.cpp \
-    Sources/rule.cpp \
     Sources/stream.cpp \
     Sources/utils.cpp \
     Sources/winsock.cpp

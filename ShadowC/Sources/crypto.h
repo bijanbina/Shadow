@@ -114,7 +114,7 @@ int crypto_derive_key(const char *, uint8_t *, size_t);
 int crypto_parse_key(const char *, uint8_t *, size_t);
 
 extern struct cache *nonce_cache;
-extern const char *supported_stream_ciphers[];
+extern char *supported_stream_ciphers;
 extern const char *supported_aead_ciphers[];
 
 #endif // _CRYPTO_H

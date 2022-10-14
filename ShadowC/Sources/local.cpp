@@ -669,10 +669,10 @@ new_remote(int fd, int timeout)
     remote->recv_ctx->remote    = remote;
     remote->send_ctx->remote    = remote;
 
-    ev_io_init(&remote->recv_ctx->io, remote_recv_cb, fd);
-    ev_io_init(&remote->send_ctx->io, remote_send_cb, fd);
-    ev_timer_init(&remote->send_ctx->watcher, remote_timeout_cb,
-                  min(MAX_CONNECT_TIMEOUT, timeout), 0);
+//    ev_io_init(&remote->recv_ctx->io, remote_recv_cb, fd);
+//    ev_io_init(&remote->send_ctx->io, remote_send_cb, fd);
+//    ev_timer_init(&remote->send_ctx->watcher, remote_timeout_cb,
+//                  min(MAX_CONNECT_TIMEOUT, timeout), 0);
 
     return remote;
 }
@@ -735,8 +735,6 @@ new_server(int fd)
 static void
 free_server(server_t *server)
 {
-    cork_dllist_remove(&server->entries);
-
     if (server->remote != NULL) {
         server->remote->server = NULL;
     }

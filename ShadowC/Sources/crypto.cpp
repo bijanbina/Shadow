@@ -1,29 +1,3 @@
-/*
- * crypto.c - Manage the global crypto
- *
- * Copyright (C) 2013 - 2019, Max Lv <max.c.lv@gmail.com>
- *
- * This file is part of the shadowsocks-libev.
- *
- * shadowsocks-libev is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * shadowsocks-libev is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with shadowsocks-libev; see the file COPYING. If not, see
- * <http://www.gnu.org/licenses/>.
- */
-
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include <stdint.h>
 #include "plusaes/plusaes.hpp"
 #include "base64.h"
@@ -34,8 +8,8 @@
 int
 balloc(buffer_t *ptr, size_t capacity)
 {
-    sodium_memzero(ptr, sizeof(buffer_t));
-    ptr->data     = ss_malloc(capacity);
+//    sodium_memzero(ptr, sizeof(buffer_t));
+    ptr->data     = (char *)malloc(capacity);
     ptr->capacity = capacity;
     return capacity;
 }
@@ -47,7 +21,7 @@ brealloc(buffer_t *ptr, size_t len, size_t capacity)
         return -1;
     size_t real_capacity = max(len, capacity);
     if (ptr->capacity < real_capacity) {
-        ptr->data     = ss_realloc(ptr->data, real_capacity);
+        ptr->data     = (char *)realloc(ptr->data, real_capacity);
         ptr->capacity = real_capacity;
     }
     return real_capacity;
