@@ -13,6 +13,7 @@
 #include <getopt.h>
 
 
+#include "stream.h"
 #include "netutils.h"
 #include "utils.h"
 #include "socks5.h"
@@ -269,7 +270,7 @@ server_handshake(buffer_t *buf)
     }
 
     if (!remote->direct) {
-        int err = crypto->encrypt(abuf, server->e_ctx, SOCKET_BUF_SIZE);
+        int err = stream_encrypt(abuf, server->e_ctx, SOCKET_BUF_SIZE);
         if (err) {
             LOGE("invalid password or cipher");
 
@@ -312,7 +313,7 @@ server_stream(buffer_t *buf)
     // insert shadowsocks header
     if (!remote->direct) {
 
-        int err = crypto->encrypt(remote->buf, server->e_ctx, SOCKET_BUF_SIZE);
+        int err = stream_encrypt(remote->buf, server->e_ctx, SOCKET_BUF_SIZE);
 
         if (err) {
             LOGE("invalid password or cipher");
@@ -555,28 +556,35 @@ remote_recv_cb(int revents)
 
     server->buf->len = r;
 
-    if (!remote->direct) {
-        int err = crypto->decrypt(server->buf, server->d_ctx, SOCKET_BUF_SIZE);
-        if (err == CRYPTO_ERROR) {
+    if (!remote->direct)
+    {
+        int err = stream_decrypt(server->buf, server->d_ctx, SOCKET_BUF_SIZE);
+        if (err == CRYPTO_ERROR)
+        {
             LOGE("invalid password or cipher");
             return;
-        } else if (err == CRYPTO_NEED_MORE) {
+        }
+        else if (err == CRYPTO_NEED_MORE)
+        {
             return; // Wait for more
         }
     }
 
     int s = send(server->fd, server->buf->data, server->buf->len, 0);
 
-    if (s == -1) {
+    if (s == -1)
+    {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             // no data, wait for send
             server->buf->idx = 0;
-        } else {
+        }
+        else {
             ERROR("remote_recv_cb_send");
 
             return;
         }
-    } else if (s < (int)(server->buf->len)) {
+    }
+    else if (s < (int)(server->buf->len)) {
         server->buf->len -= s;
         server->buf->idx  = s;
     }
@@ -718,8 +726,8 @@ new_server(int fd)
 
     server->e_ctx = (cipher_ctx_t *)malloc(sizeof(cipher_ctx_t));
     server->d_ctx = (cipher_ctx_t *)malloc(sizeof(cipher_ctx_t));
-    crypto->ctx_init(crypto->cipher, server->e_ctx, 1);
-    crypto->ctx_init(crypto->cipher, server->d_ctx, 0);
+    stream_ctx_init(crypto->cipher, server->e_ctx, 1);
+    stream_ctx_init(crypto->cipher, server->d_ctx, 0);
 
 //    ev_io_init(&server->recv_ctx->io, server_recv_cb, fd, EV_READ);
 //    ev_io_init(&server->send_ctx->io, server_send_cb, fd, EV_WRITE);
@@ -739,11 +747,11 @@ free_server(server_t *server)
         server->remote->server = NULL;
     }
     if (server->e_ctx != NULL) {
-        crypto->ctx_release(server->e_ctx);
+        stream_ctx_release(server->e_ctx);
         ss_free(server->e_ctx);
     }
     if (server->d_ctx != NULL) {
-        crypto->ctx_release(server->d_ctx);
+        stream_ctx_release(server->d_ctx);
         ss_free(server->d_ctx);
     }
     if (server->buf != NULL) {
@@ -768,7 +776,8 @@ create_remote(listen_ctx_t *listener,
 
     int index = rand() % listener->remote_num;
     if (addr == NULL) {
-        remote_addr = listener->remote_addr[index];
+//        remote_addr = listener->address;
+           /////////////////////////FIXME///////////////////////////////
     } else {
         remote_addr = addr;
     }
@@ -878,7 +887,7 @@ main(int argc, char **argv)
 
     int remote_num = 0;
     ss_addr_t remote_addr[MAX_REMOTE_NUM];
-    char *remote_port = NULL;
+
 
     memset(remote_addr, 0, sizeof(ss_addr_t) * MAX_REMOTE_NUM);
     srand(time(NULL));
@@ -887,15 +896,55 @@ main(int argc, char **argv)
 
     USE_TTY();
     local_port = "1088";
-    remote_port = "7801";
+    int remote_port = 7801;
     password = "pass";
     method = "aes-256-cfb";
     remote_addr[0].host = "85.10.139.67";
-    remote_addr[0].port = NULL;
     remote_num++;
-//    timeout = 100;
 
     winsock_init();
+    // Setup keys
+    LOGI("initializing ciphers... %s", method);
+    crypto = crypto_init(password, key);
+    if (crypto == NULL)
+        FATAL("failed to initialize ciphers");
+
+    // Setup proxy context
+    listen_ctx_t listen_ctx;
+    listen_ctx.remote_num  = 1;
+    listen_ctx.address = remote_addr[0].host;
+    listen_ctx.port = remote_port;
+
+    listen_ctx.timeout = 100;
+    listen_ctx.iface   = iface;
+    listen_ctx.mptcp   = mptcp;
+
+    // Setup signal handler
+//    ev_signal_init(&sigint_watcher, signal_cb, SIGINT);
+//    ev_signal_init(&sigterm_watcher, signal_cb, SIGTERM);
+//    ev_signal_start(EV_DEFAULT, &sigint_watcher);
+//    ev_signal_start(EV_DEFAULT, &sigterm_watcher);
+
+
+     LOGI("listening at %s:%s", local_addr, local_port);
+
+
+    // Setup socket
+    int listenfd;
+    listenfd = create_and_bind(local_addr, local_port);
+
+    if (listenfd == -1) {
+        FATAL("bind() error");
+    }
+    if (listen(listenfd, SOMAXCONN) == -1) {
+        FATAL("listen() error");
+    }
+    setnonblocking(listenfd);
+
+    listen_ctx.fd = listenfd;
+
+//    ev_io_init(&listen_ctx.io, accept_cb, listenfd, EV_READ);
+//    ev_io_start(loop, &listen_ctx.io);
 
     // Init connections
 //    cork_dllist_init(&connections);

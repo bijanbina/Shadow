@@ -1,33 +1,11 @@
-
 #define CIPHER_UNSUPPORTED "unsupported"
 
+#include "plusaes/plusaes.hpp"
 #include "stream.h"
 #include "utils.h"
 
 #define SODIUM_BLOCK_SIZE   64
-
-#define NONE                -1
-#define TABLE               0
-#define RC4                 1
-#define RC4_MD5             2
-#define AES_128_CFB         3
-#define AES_192_CFB         4
 #define AES_256_CFB         5
-#define AES_128_CTR         6
-#define AES_192_CTR         7
-#define AES_256_CTR         8
-#define BF_CFB              9
-#define CAMELLIA_128_CFB    10
-#define CAMELLIA_192_CFB    11
-#define CAMELLIA_256_CFB    12
-#define CAST5_CFB           13
-#define DES_CFB             14
-#define IDEA_CFB            15
-#define RC2_CFB             16
-#define SEED_CFB            17
-#define SALSA20             18
-#define CHACHA20            19
-#define CHACHA20IETF        20
 
 char *supported_stream_ciphers = "aes-256-cfb";
 
@@ -37,6 +15,31 @@ char *supported_stream_ciphers_mbedtls = "AES-256-CFB128";
 int supported_stream_ciphers_nonce_size = 16;
 
 int supported_stream_ciphers_key_size = 32;
+
+ScStream::ScStream(QObject *parent) : QObject(parent)
+{
+
+    // parameters
+    const std::string raw_data = "Hello, plusaes";
+    key = plusaes::key_from_string(&"EncryptionKey128"); // 16-char = 128-bit
+    const unsigned char iv[16] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+    };
+
+    // encrypt
+    const unsigned long encrypted_size = plusaes::get_padded_encrypted_size(raw_data.size());
+    std::vector<unsigned char> encrypted(encrypted_size);
+
+    plusaes::encrypt_cbc((unsigned char*)raw_data.data(), raw_data.size(), &key[0], key.size(), &iv, &encrypted[0], encrypted.size(), true);
+    // fb 7b ae 95 d5 0f c5 6f 43 7d 14 6b 6a 29 15 70
+
+    // decrypt
+    unsigned long padded_size = 0;
+    std::vector<unsigned char> decrypted(encrypted_size);
+
+    plusaes::decrypt_cbc(&encrypted[0], encrypted.size(), &key[0], key.size(), &iv, &decrypted[0], decrypted.size(), &padded_size);
+}
 
 int
 cipher_nonce_size(const cipher_t *cipher)
@@ -142,38 +145,6 @@ cipher_ctx_update(cipher_ctx_t *ctx, uint8_t *output, size_t *olen,
                                  (uint8_t *)output, olen);
 }
 
-int
-stream_encrypt_all(buffer_t *plaintext, cipher_t *cipher, size_t capacity)
-{
-    cipher_ctx_t cipher_ctx;
-    stream_ctx_init(cipher, &cipher_ctx, 1);
-
-    size_t nonce_len = cipher->nonce_len;
-    int err          = CRYPTO_OK;
-
-    static buffer_t tmp = { 0, 0, 0, NULL };
-    brealloc(&tmp, nonce_len + plaintext->len, capacity);
-    buffer_t *ciphertext = &tmp;
-    ciphertext->len = plaintext->len;
-
-    uint8_t *nonce = cipher_ctx.nonce;
-    cipher_ctx_set_nonce(&cipher_ctx, nonce, nonce_len, 1);
-    memcpy(ciphertext->data, nonce, nonce_len);
-
-    err = cipher_ctx_update(&cipher_ctx, (uint8_t *)(ciphertext->data + nonce_len),
-                            &ciphertext->len, (const uint8_t *)plaintext->data,
-                            plaintext->len);
-    stream_ctx_release(&cipher_ctx);
-
-    if (err)
-        return CRYPTO_ERROR;
-
-    brealloc(plaintext, nonce_len + ciphertext->len, capacity);
-    memcpy(plaintext->data, ciphertext->data, nonce_len + ciphertext->len);
-    plaintext->len = nonce_len + ciphertext->len;
-
-    return CRYPTO_OK;
-}
 
 int
 stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
@@ -215,49 +186,6 @@ stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
     brealloc(plaintext, nonce_len + ciphertext->len, capacity);
     memcpy(plaintext->data, ciphertext->data, nonce_len + ciphertext->len);
     plaintext->len = nonce_len + ciphertext->len;
-
-    return CRYPTO_OK;
-}
-
-int
-stream_decrypt_all(buffer_t *ciphertext, cipher_t *cipher, size_t capacity)
-{
-    size_t nonce_len = cipher->nonce_len;
-    int err          = CRYPTO_OK;
-
-    if (ciphertext->len <= nonce_len) {
-        return CRYPTO_ERROR;
-    }
-
-    cipher_ctx_t cipher_ctx;
-    stream_ctx_init(cipher, &cipher_ctx, 0);
-
-    static buffer_t tmp = { 0, 0, 0, NULL };
-    brealloc(&tmp, ciphertext->len, capacity);
-    buffer_t *plaintext = &tmp;
-    plaintext->len = ciphertext->len - nonce_len;
-
-    uint8_t *nonce = cipher_ctx.nonce;
-    memcpy(nonce, ciphertext->data, nonce_len);
-
-    if (ppbloom_check((void *)nonce, nonce_len) == 1) {
-        LOGE("crypto: stream: repeat IV detected");
-        return CRYPTO_ERROR;
-    }
-
-    cipher_ctx_set_nonce(&cipher_ctx, nonce, nonce_len, 0);
-
-    err = cipher_ctx_update(&cipher_ctx, (uint8_t *)plaintext->data, &plaintext->len,
-                            (const uint8_t *)(ciphertext->data + nonce_len),
-                            ciphertext->len - nonce_len);
-    stream_ctx_release(&cipher_ctx);
-
-    if (err)
-        return CRYPTO_ERROR;
-
-    brealloc(ciphertext, plaintext->len, capacity);
-    memcpy(ciphertext->data, plaintext->data, plaintext->len);
-    ciphertext->len = plaintext->len;
 
     return CRYPTO_OK;
 }
@@ -344,7 +272,6 @@ stream_decrypt(buffer_t *ciphertext, cipher_ctx_t *cipher_ctx, size_t capacity)
 void
 stream_ctx_init(cipher_t *cipher, cipher_ctx_t *cipher_ctx, int enc)
 {
-    sodium_memzero(cipher_ctx, sizeof(cipher_ctx_t));
     stream_cipher_ctx_init(cipher_ctx, cipher->method, enc);
     cipher_ctx->cipher = cipher;
 
@@ -354,19 +281,14 @@ stream_ctx_init(cipher_t *cipher, cipher_ctx_t *cipher_ctx, int enc)
 }
 
 cipher_t *
-stream_key_init(int method, const char *pass, const char *key)
+stream_key_init(const char *pass, const char *key)
 {
-    if (method <= TABLE || method >= STREAM_CIPHER_NUM) {
-        LOGE("cipher->key_init(): Illegal method");
-        return NULL;
-    }
-
+    int m = 5;
     cipher_t *cipher = (cipher_t *)ss_malloc(sizeof(cipher_t));
     memset(cipher, 0, sizeof(cipher_t));
 
-    cipher->info = (cipher_kt_t *)stream_get_cipher_type(method);
-
-    if (cipher->info == NULL && cipher->key_len == 0) {
+    if (cipher->key_len == 0)
+    {
         LOGE("Cipher %s not found in crypto library", supported_stream_ciphers[method]);
         FATAL("Cannot initialize cipher");
     }
@@ -380,14 +302,7 @@ stream_key_init(int method, const char *pass, const char *key)
         FATAL("Cannot generate key and NONCE");
     }
     cipher->nonce_len = cipher_nonce_size(cipher);
-    cipher->method = method;
+    cipher->method = m;
 
     return cipher;
-}
-
-cipher_t *
-stream_init(const char *pass, const char *key)
-{
-    int m = 5;
-    return stream_key_init(m, pass, key);
 }

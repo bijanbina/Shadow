@@ -1,16 +1,19 @@
 #ifndef _LOCAL_H
 #define _LOCAL_H
 
+#include <QString>
 #include "winsock.h"
 #include "crypto.h"
 #include "common.h"
 
 typedef struct listen_ctx {
     int remote_num;
+    char *iface;
     int timeout;
     int fd;
     int mptcp;
-    struct sockaddr **remote_addr;
+    int port;
+    QString address;
 } listen_ctx_t;
 
 typedef struct server_ctx {

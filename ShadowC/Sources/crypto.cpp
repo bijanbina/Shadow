@@ -65,12 +65,7 @@ crypto_md5(const unsigned char *d, size_t n, unsigned char *md)
     if (md == NULL) {
         md = m;
     }
-#if MBEDTLS_VERSION_NUMBER >= 0x02070000
-    if (mbedtls_md5_ret(d, n, md) != 0)
-        FATAL("Failed to calculate MD5");
-#else
-    mbedtls_md5(d, n, md);
-#endif
+//    mbedtls_md5(d, n, md);
     return md;
 }
 
@@ -80,49 +75,19 @@ entropy_check(void)
 }
 
 crypto_t *
-crypto_init(const char *password, const char *key, const char *method)
+crypto_init(const char *password, const char *key)
 {
-    int i, m = -1;
-
     entropy_check();
 
-    // Initialize NONCE bloom filter
-    ppbloom_init(BF_NUM_ENTRIES_FOR_CLIENT, BF_ERROR_RATE_FOR_CLIENT);
+    LOGI("Stream ciphers are insecure, therefore deprecated, and should be almost always avoided.");
+    cipher_t *cipher = stream_init(password, key);
+    if (cipher == NULL)
+        return NULL;
 
-    if (method != NULL)
-    {
-        for (i = 0; i < STREAM_CIPHER_NUM; i++)
-            if (strcmp(method, supported_stream_ciphers[i]) == 0)
-            {
-                m = i;
-                break;
-            }
-        if (m != -1)
-        {
-            LOGI("Stream ciphers are insecure, therefore deprecated, and should be almost always avoided.");
-            cipher_t *cipher = stream_init(password, key, method);
-            if (cipher == NULL)
-                return NULL;
-            crypto_t *crypto = (crypto_t *)ss_malloc(sizeof(crypto_t));
-            crypto_t tmp     = {
-                .cipher      = cipher,
-                .encrypt_all = &stream_encrypt_all,
-                .decrypt_all = &stream_decrypt_all,
-                .encrypt     = &stream_encrypt,
-                .decrypt     = &stream_decrypt,
-                .ctx_init    = &stream_ctx_init,
-                .ctx_release = &stream_ctx_release,
-            };
-            memcpy(crypto, &tmp, sizeof(crypto_t));
-            return crypto;
-        }
-        //////////////////////
-        //crypto is filled
-        //////////////////////
-    }
+    crypto_t *crypto = (crypto_t *)ss_malloc(sizeof(crypto_t));
+    crypto->cipher      = cipher;
 
-    LOGE("invalid cipher name: %s", method);
-    return NULL;
+    return crypto;
 }
 
 int

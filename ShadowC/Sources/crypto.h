@@ -33,7 +33,7 @@
 
 #define MAX_KEY_LENGTH 64
 #define MAX_NONCE_LENGTH 32
-#define MAX_MD_SIZE MBEDTLS_MD_MAX_SIZE
+#define MAX_MD_SIZE 32
 /* we must have MBEDTLS_CIPHER_MODE_CFB defined */
 #define ADDRTYPE_MASK 0xF
 
@@ -91,14 +91,6 @@ typedef struct {
 
 typedef struct crypto {
     cipher_t *cipher;
-
-    int(*const encrypt_all) (buffer_t *, cipher_t *, size_t);
-    int(*const decrypt_all) (buffer_t *, cipher_t *, size_t);
-    int(*const encrypt) (buffer_t *, cipher_ctx_t *, size_t);
-    int(*const decrypt) (buffer_t *, cipher_ctx_t *, size_t);
-
-    void(*const ctx_init) (cipher_t *, cipher_ctx_t *, int);
-    void(*const ctx_release) (cipher_ctx_t *);
 } crypto_t;
 
 int balloc(buffer_t *, size_t);
@@ -107,7 +99,7 @@ int bprepend(buffer_t *, buffer_t *, size_t);
 void bfree(buffer_t *);
 int rand_bytes(void *, int);
 
-crypto_t *crypto_init(const char *, const char *, const char *);
+crypto_t *crypto_init(const char *, const char *);
 unsigned char *crypto_md5(const unsigned char *, size_t, unsigned char *);
 
 int crypto_derive_key(const char *, uint8_t *, size_t);
