@@ -7,27 +7,36 @@
 #define SODIUM_BLOCK_SIZE   64
 #define AES_256_CFB         5
 
-char *supported_stream_ciphers = "aes-256-cfb";
+char *supported_stream_ciphers = "aes-256-cbc";
 
 
 char *supported_stream_ciphers_mbedtls = "AES-256-CFB128";
 
 int supported_stream_ciphers_nonce_size = 16;
 
+#define AES_256_KLEN 32
 int supported_stream_ciphers_key_size = 32;
 
-ScStream::ScStream(QObject *parent) : QObject(parent)
+ScStream::ScStream(char *pass, QObject *parent) : QObject(parent)
 {
+    char key_buffer[AES_256_KLEN+1];
+    for(int i=0 ; i<AES_256_KLEN ; i++)
+    {
+        key_buffer[i] = ' ';
+    }
+    key_buffer[AES_256_KLEN] = 0;
 
-    // parameters
-    const std::string raw_data = "Hello, plusaes";
-    key = plusaes::key_from_string(&"EncryptionKey128"); // 16-char = 128-bit
-    const unsigned char iv[16] = {
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-        0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-    };
+    strcpy(key_buffer, pass);
+
+    key = plusaes::key_from_string(&key_buffer); // 32-char = 256-bit
+    unsigned char iv[AES_256_KLEN];
+    for(int i=0 ; i<AES_256_KLEN ; i++)
+    {
+        iv[i] = i;
+    }
 
     // encrypt
+    const std::string raw_data = "Hello, plusaes";
     const unsigned long encrypted_size = plusaes::get_padded_encrypted_size(raw_data.size());
     std::vector<unsigned char> encrypted(encrypted_size);
 
@@ -41,8 +50,12 @@ ScStream::ScStream(QObject *parent) : QObject(parent)
     plusaes::decrypt_cbc(&encrypted[0], encrypted.size(), &key[0], key.size(), &iv, &decrypted[0], decrypted.size(), &padded_size);
 }
 
-int
-cipher_nonce_size(const cipher_t *cipher)
+ScStream::~ScStream()
+{
+    ;
+}
+
+int cipher_nonce_size(const cipher_t *cipher)
 {
     if (cipher == NULL) {
         return 0;
@@ -59,51 +72,14 @@ cipher_key_size(const cipher_t *cipher)
     return cipher->info->key_bitlen / 8;
 }
 
-const cipher_kt_t *
-stream_get_cipher_type(int method)
+const cipher_kt_t * stream_get_cipher_type(int method)
 {
     char *ciphername  = supported_stream_ciphers;
     char *mbedtlsname = supported_stream_ciphers_mbedtls;
     return mbedtls_cipher_info_from_string(mbedtlsname);
 }
 
-void
-stream_cipher_ctx_init(cipher_ctx_t *ctx, int method, int enc)
-{
-
-    char *ciphername    = supported_stream_ciphers;
-    cipher_kt_t *cipher = stream_get_cipher_type(method);
-
-    ctx->evp = (cipher_evp_t *)malloc(sizeof(cipher_evp_t));
-    memset(ctx->evp, 0, sizeof(cipher_evp_t));
-    cipher_evp_t *evp = ctx->evp;
-
-    if (cipher == NULL) {
-        LOGE("Cipher %s not found in mbed TLS library", ciphername);
-        FATAL("Cannot initialize mbed TLS cipher");
-    }
-    mbedtls_cipher_init(evp);
-    if (mbedtls_cipher_setup(evp, cipher) != 0) {
-        FATAL("Cannot initialize mbed TLS cipher context");
-    }
-}
-
-void
-stream_ctx_release(cipher_ctx_t *cipher_ctx)
-{
-    if (cipher_ctx->chunk != NULL) {
-        bfree(cipher_ctx->chunk);
-        ss_free(cipher_ctx->chunk);
-        cipher_ctx->chunk = NULL;
-    }
-
-
-    mbedtls_cipher_free(cipher_ctx->evp);
-    ss_free(cipher_ctx->evp);
-}
-
-void
-cipher_ctx_set_nonce(cipher_ctx_t *cipher_ctx, uint8_t *nonce, size_t nonce_len,
+void cipher_ctx_set_nonce(cipher_ctx_t *cipher_ctx, uint8_t *nonce, size_t nonce_len,
                      int enc)
 {
     const unsigned char *true_key;
@@ -136,8 +112,7 @@ cipher_ctx_set_nonce(cipher_ctx_t *cipher_ctx, uint8_t *nonce, size_t nonce_len,
     }
 }
 
-static int
-cipher_ctx_update(cipher_ctx_t *ctx, uint8_t *output, size_t *olen,
+static int cipher_ctx_update(cipher_ctx_t *ctx, uint8_t *output, size_t *olen,
                   const uint8_t *input, size_t ilen)
 {
     cipher_evp_t *evp = ctx->evp;
@@ -146,8 +121,7 @@ cipher_ctx_update(cipher_ctx_t *ctx, uint8_t *output, size_t *olen,
 }
 
 
-int
-stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
+int ScStream::stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
 {
     if (cipher_ctx == NULL)
         return CRYPTO_ERROR;
@@ -158,7 +132,8 @@ stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
 
     int err          = CRYPTO_OK;
     size_t nonce_len = 0;
-    if (!cipher_ctx->init) {
+    if (!cipher_ctx->init)
+    {
         nonce_len = cipher_ctx->cipher->nonce_len;
     }
 
@@ -166,7 +141,8 @@ stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
     buffer_t *ciphertext = &tmp;
     ciphertext->len = plaintext->len;
 
-    if (!cipher_ctx->init) {
+    if (!cipher_ctx->init)
+    {
         cipher_ctx_set_nonce(cipher_ctx, cipher_ctx->nonce, nonce_len, 1);
         memcpy(ciphertext->data, cipher_ctx->nonce, nonce_len);
         cipher_ctx->counter = 0;
@@ -190,8 +166,7 @@ stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
     return CRYPTO_OK;
 }
 
-int
-stream_decrypt(buffer_t *ciphertext, cipher_ctx_t *cipher_ctx, size_t capacity)
+int ScStream::stream_decrypt(buffer_t *ciphertext, cipher_ctx_t *cipher_ctx, size_t capacity)
 {
     if (cipher_ctx == NULL)
         return CRYPTO_ERROR;
@@ -269,19 +244,8 @@ stream_decrypt(buffer_t *ciphertext, cipher_ctx_t *cipher_ctx, size_t capacity)
     return CRYPTO_OK;
 }
 
-void
-stream_ctx_init(cipher_t *cipher, cipher_ctx_t *cipher_ctx, int enc)
-{
-    stream_cipher_ctx_init(cipher_ctx, cipher->method, enc);
-    cipher_ctx->cipher = cipher;
 
-    if (enc) {
-        rand_bytes(cipher_ctx->nonce, cipher->nonce_len);
-    }
-}
-
-cipher_t *
-stream_key_init(const char *pass, const char *key)
+cipher_t * stream_key_init(const char *pass, const char *key)
 {
     int m = 5;
     cipher_t *cipher = (cipher_t *)ss_malloc(sizeof(cipher_t));
@@ -289,7 +253,7 @@ stream_key_init(const char *pass, const char *key)
 
     if (cipher->key_len == 0)
     {
-        LOGE("Cipher %s not found in crypto library", supported_stream_ciphers[method]);
+        LOGE("Cipher %s not found in crypto library", supported_stream_ciphers[m]);
         FATAL("Cannot initialize cipher");
     }
 

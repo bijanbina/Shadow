@@ -5,6 +5,7 @@
 #include "winsock.h"
 #include "crypto.h"
 #include "common.h"
+#include "stream.h"
 
 typedef struct listen_ctx {
     int remote_num;
@@ -25,8 +26,8 @@ typedef struct server {
     int fd;
     int stage;
 
-    cipher_ctx_t *e_ctx;
-    cipher_ctx_t *d_ctx;
+    ScStream *e_ctx; // encoder
+    ScStream *d_ctx; // decoder
     struct server_ctx *recv_ctx;
     struct server_ctx *send_ctx;
     struct listen_ctx *listener;

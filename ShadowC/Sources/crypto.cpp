@@ -74,24 +74,7 @@ entropy_check(void)
 {
 }
 
-crypto_t *
-crypto_init(const char *password, const char *key)
-{
-    entropy_check();
-
-    LOGI("Stream ciphers are insecure, therefore deprecated, and should be almost always avoided.");
-    cipher_t *cipher = stream_init(password, key);
-    if (cipher == NULL)
-        return NULL;
-
-    crypto_t *crypto = (crypto_t *)ss_malloc(sizeof(crypto_t));
-    crypto->cipher      = cipher;
-
-    return crypto;
-}
-
-int
-crypto_derive_key(const char *pass, uint8_t *key, size_t key_len)
+int crypto_derive_key(const char *pass, uint8_t *key, size_t key_len)
 {
     size_t datal;
     datal = strlen((const char *)pass);
@@ -114,7 +97,8 @@ crypto_derive_key(const char *pass, uint8_t *key, size_t key_len)
     if (mbedtls_md_setup(&c, md, 0))
         return 0;
 
-    for (j = 0, addmd = 0; j < key_len; addmd++) {
+    for (j = 0, addmd = 0; j < key_len; addmd++)
+    {
         mbedtls_md_starts(&c);
         if (addmd) {
             mbedtls_md_update(&c, md_buf, mds);

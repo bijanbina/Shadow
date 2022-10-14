@@ -89,9 +89,6 @@ typedef struct {
     uint8_t nonce[MAX_NONCE_LENGTH];
 } cipher_ctx_t;
 
-typedef struct crypto {
-    cipher_t *cipher;
-} crypto_t;
 
 int balloc(buffer_t *, size_t);
 int brealloc(buffer_t *, size_t, size_t);
@@ -99,7 +96,6 @@ int bprepend(buffer_t *, buffer_t *, size_t);
 void bfree(buffer_t *);
 int rand_bytes(void *, int);
 
-crypto_t *crypto_init(const char *, const char *);
 unsigned char *crypto_md5(const unsigned char *, size_t, unsigned char *);
 
 int crypto_derive_key(const char *, uint8_t *, size_t);
