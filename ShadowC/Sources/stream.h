@@ -16,10 +16,10 @@ class ScStream : public QObject
 {
     Q_OBJECT
 public:
-    explicit ScStream(char *pass, QObject *parent = nullptr);
+    explicit ScStream(QString pass, QObject *parent = nullptr);
     ~ScStream();
 
-    int stream_encrypt(buffer_t *, cipher_ctx_t *, size_t);
+    int stream_encrypt(QByteArray *, size_t);
     int stream_decrypt(buffer_t *, cipher_ctx_t *, size_t);
 
 private:

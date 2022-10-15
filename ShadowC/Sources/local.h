@@ -2,10 +2,8 @@
 #define _LOCAL_H
 
 #include <QString>
-#include "winsock.h"
-#include "crypto.h"
-#include "common.h"
-#include "stream.h"
+#include <QDebug>
+#include "socks5_server.h"
 
 typedef struct listen_ctx {
     int remote_num;
@@ -54,5 +52,36 @@ typedef struct remote {
     struct server *server;
     struct sockaddr_storage addr;
 } remote_t;
+
+class ScLocal : public QObject
+{
+    Q_OBJECT
+public:
+    explicit ScLocal(ScSetting *st, QObject *parent = nullptr);
+    ~ScLocal();
+
+private slots:
+    void delayed_connect_cb(int revents);
+    void server_recv_cb(int revents);
+    void server_send_cb(int revents);
+    void remote_timeout_cb(int revents);
+    void remote_recv_cb(int revents);
+    void remote_send_cb(int revents);
+    void accept_cb(int revents);
+    void new_server(int fd);
+
+signals:
+    void errorConnection();
+    void clientDisconnected();
+    void clientConnected();
+
+private:
+    void listen_local(int port);
+
+    std::vector<unsigned char> key;
+    QTcpServer *server;
+    ScSocks5Server *socks5_server;
+    ScSetting *setting;
+};
 
 #endif // _LOCAL_H

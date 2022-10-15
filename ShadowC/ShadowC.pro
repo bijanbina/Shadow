@@ -1,6 +1,7 @@
 TEMPLATE = app
 
 QT += qml quick dbus core websockets
+QT += widgets
 
 CONFIG += console
 
@@ -50,8 +51,10 @@ HEADERS += \
     Sources/local.h \
     Sources/netutils.h \
     Sources/plusaes/plusaes.hpp \
+    Sources/remote_client.h \
     Sources/shadowsocks.h \
     Sources/socks5.h \
+    Sources/socks5_server.h \
     Sources/stream.h \
     Sources/uthash.h \
     Sources/utils.h \
@@ -61,7 +64,10 @@ SOURCES += \
     Sources/base64.cpp \
     Sources/crypto.cpp \
     Sources/local.cpp \
+    Sources/main.cpp \
     Sources/netutils.cpp \
+    Sources/remote_client.cpp \
+    Sources/socks5_server.cpp \
     Sources/stream.cpp \
     Sources/utils.cpp \
     Sources/winsock.cpp

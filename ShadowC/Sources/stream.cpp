@@ -17,7 +17,7 @@ int supported_stream_ciphers_nonce_size = 16;
 #define AES_256_KLEN 32
 int supported_stream_ciphers_key_size = 32;
 
-ScStream::ScStream(char *pass, QObject *parent) : QObject(parent)
+ScStream::ScStream(QString pass, QObject *parent) : QObject(parent)
 {
     char key_buffer[AES_256_KLEN+1];
     for(int i=0 ; i<AES_256_KLEN ; i++)
@@ -26,7 +26,7 @@ ScStream::ScStream(char *pass, QObject *parent) : QObject(parent)
     }
     key_buffer[AES_256_KLEN] = 0;
 
-    strcpy(key_buffer, pass);
+    strcpy(key_buffer, pass.toStdString().c_str());
 
     key = plusaes::key_from_string(&key_buffer); // 32-char = 256-bit
     unsigned char iv[AES_256_KLEN];
@@ -121,21 +121,13 @@ static int cipher_ctx_update(cipher_ctx_t *ctx, uint8_t *output, size_t *olen,
 }
 
 
-int ScStream::stream_encrypt(buffer_t *plaintext, cipher_ctx_t *cipher_ctx, size_t capacity)
+int ScStream::stream_encrypt(QByteArray *plaintext, size_t capacity)
 {
-    if (cipher_ctx == NULL)
-        return CRYPTO_ERROR;
-
-    cipher_t *cipher = cipher_ctx->cipher;
-
     static buffer_t tmp = { 0, 0, 0, NULL };
 
     int err          = CRYPTO_OK;
     size_t nonce_len = 0;
-    if (!cipher_ctx->init)
-    {
-        nonce_len = cipher_ctx->cipher->nonce_len;
-    }
+
 
     brealloc(&tmp, nonce_len + plaintext->len, capacity);
     buffer_t *ciphertext = &tmp;
