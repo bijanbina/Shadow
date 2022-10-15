@@ -175,7 +175,7 @@ int ScSocks5Server::serverHandshake()
 
     if( !remote_client->direct )
     {
-        int err = e_ctx->stream_encrypt(header_buf, NULL, SOCKET_BUF_SIZE);
+        int err = e_ctx->stream_encrypt(header_buf);
         if( err )
         {
             LOGE("invalid password or cipher");
@@ -203,6 +203,97 @@ int ScSocks5Server::serverHandshake()
     }
 
     return -1;
+}
+
+void ScSocks5Server::serverStream()
+{
+    server_ctx_t *server_recv_ctx = NULL;//(server_ctx_t *)w;
+    server_t *server              = server_recv_ctx->server;
+    remote_t *remote              = server->remote;
+
+    if (remote == NULL)
+    {
+        LOGE("invalid remote");
+        return;
+    }
+
+    // insert shadowsocks header
+    if (!remote->direct)
+    {
+
+        int err = e_ctx->stream_encrypt(remote->buf);
+
+        if (err)
+        {
+            LOGE("invalid password or cipher");
+            return;
+        }
+
+        if (server->abuf)
+        {
+            bprepend(remote->buf, server->abuf, SOCKET_BUF_SIZE);
+            bfree(server->abuf);
+            ss_free(server->abuf);
+            server->abuf = NULL;
+        }
+    }
+
+    if (!remote->send_ctx->connected)
+    {
+        remote->buf->idx = 0;
+
+        if (fast_open==0 || remote->direct)
+        {
+            // connecting, wait until connected
+            int r = connect(remote->fd, (struct sockaddr *)&(remote->addr), remote->addr_len);
+
+            if (r == -1 && errno != CONNECT_IN_PROGRESS)
+            {
+                ERROR("connect");
+                return;
+            }
+
+            // wait on remote connected event
+//            ev_io_stop(EV_A_ & server_recv_ctx->io);
+//            ev_io_start(EV_A_ & remote->send_ctx->io);
+//            ev_timer_start(EV_A_ & remote->send_ctx->watcher);
+        }
+
+    }
+    else
+    {
+
+        int s = send(remote->fd, remote->buf->data, remote->buf->len, 0);
+        if (s == -1)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                // no data, wait for send
+                remote->buf->idx = 0;
+//                ev_io_stop(EV_A_ & server_recv_ctx->io);
+//                ev_io_start(EV_A_ & remote->send_ctx->io);
+                return;
+            }
+            else
+            {
+                ERROR("server_recv_cb_send");
+                return;
+            }
+        }
+        else if (s < (int)(remote->buf->len))
+        {
+            remote->buf->len -= s;
+            remote->buf->idx  = s;
+//            ev_io_stop(EV_A_ & server_recv_ctx->io);
+//            ev_io_start(EV_A_ & remote->send_ctx->io);
+            return;
+        }
+        else
+        {
+            remote->buf->idx = 0;
+            remote->buf->len = 0;
+        }
+    }
 }
 
 int ScSocks5Server::server_handshake_reply(int udp_assc, struct socks5_response *response)

@@ -7,8 +7,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define STREAM_CIPHER_NUM          21
-
+#define STREAM_CIPHER_NUM  21
+#define AES_256_KLEN       32
 #include "crypto.h"
 
 
@@ -19,11 +19,12 @@ public:
     explicit ScStream(QString pass, QObject *parent = nullptr);
     ~ScStream();
 
-    int stream_encrypt(QByteArray *, size_t);
-    int stream_decrypt(buffer_t *, cipher_ctx_t *, size_t);
+    int stream_encrypt(QByteArray *);
+    int stream_decrypt(QByteArray *);
 
 private:
     std::vector<unsigned char> key;
+    unsigned char iv[16];
 };
 
 #endif // _STREAM_H

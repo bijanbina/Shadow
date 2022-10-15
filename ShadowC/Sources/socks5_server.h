@@ -17,6 +17,9 @@ public:
     explicit ScSocks5Server(ScSetting *st, QTcpSocket *cs, QObject *parent = nullptr);
     ~ScSocks5Server();
 
+    ScStream *e_ctx;
+    ScStream *d_ctx;
+
 public slots:
     void readyRead();
     void displayError(QAbstractSocket::SocketError socketError);
@@ -32,8 +35,6 @@ private:
 
     QTcpSocket *conn;
     ScRemoteClient *remote_client;
-    ScStream *e_ctx;
-    ScStream *d_ctx;
     ScSetting *setting;
     QByteArray buf;
     QByteArray header_buf;
