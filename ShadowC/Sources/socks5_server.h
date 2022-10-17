@@ -23,6 +23,7 @@ public:
 public slots:
     void readyRead();
     void displayError(QAbstractSocket::SocketError socketError);
+    void remoteReadyData(QByteArray *remote_data);
 
 signals:
     void readyData(QByteArray data);
@@ -30,6 +31,7 @@ signals:
 private:
     int serverInit();
     int serverHandshake();
+    void serverStream();
     void create_remote(int direct);
     int server_handshake_reply(int udp_assc, struct socks5_response *response);
 

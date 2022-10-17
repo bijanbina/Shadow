@@ -2,50 +2,91 @@
 
 ScRemoteClient::ScRemoteClient(ScSetting *st, QObject *parent) : QObject(parent)
 {
-    connect(remote_socket, SIGNAL(connected()), this, SLOT(connected()));
-    connect(remote_socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
-    connect(remote_socket, SIGNAL(error(QAbstractSocket::SocketError)),
+    setting = st;
+    connect(socket, SIGNAL(connected()), this, SLOT(connected()));
+    connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
+    connect(socket, SIGNAL(error(QAbstractSocket::SocketError)),
             this, SLOT(displayError(QAbstractSocket::SocketError)));
+}
+void ScRemoteClient::open()
+{
+    qDebug() << "ScRemoteClient, connecting to:" << setting->remote_host << setting->remote_port;
+    socket->connectToHost(QHostAddress(setting->remote_host), setting->remote_port);
+}
+
+void ScRemoteClient::stream()
+{
+    int s = socket->write(buf);
+
+    if (s == -1)
+    {
+        buf.clear();
+        qDebug("server_recv_cb_send");
+        return;
+    }
+    else if( s<buf.length() )
+    {
+        buf.remove(0, s);
+        return;
+    }
+    else
+    {
+        buf.clear();
+    }
 }
 
 void ScRemoteClient::connected()
 {
     qDebug() << "Client: Connected";
-    remote_socket->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+    socket->setSocketOption(QAbstractSocket::LowDelayOption, 1);
 
-    connect(remote_socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
+    connect(socket, SIGNAL(readyRead()), this, SLOT(readyRead()));
 //    timer->stop();
+
+    if( buf.length()==0 )
+    {
+        return;
+    }
+    else
+    {
+        // has data to send
+        ssize_t s = socket->write(buf);
+
+        if (s == -1)
+        {
+            return;
+        }
+        else if( s<buf.length() )
+        {
+            // partly sent, move memory, wait for the next time to send
+            buf.remove(0, s);
+            return;
+        }
+        else
+        {
+            // all sent out, wait for reading
+            buf.clear();
+        }
+    }
 }
 
 void ScRemoteClient::readyRead()
 {
-   QString read_data = remote_socket->readAll();
+   QByteArray read_data = socket->readAll();
 
    if( read_data.size()==0 )
    {
        return;
    }
 
-   if( read_data.size() )
-   {
-       qDebug() <<  "Client: Received=" << read_data << read_data.size();
-       emit newKey(read_data);
-   }
+   emit readyData(&read_data);
 }
 
 void ScRemoteClient::disconnected()
 {
-//    QMetaObject::invokeMethod(root, "set_disconnected");
-//    m_wakeLock.callMethod<void>("release", "()V");
-    remote_socket->close();
-//    disconnect((&tcpClient, SIGNAL(readyRead()), this, SLOT(readyRead())));
-
-    if( !(timer->isActive()) )
-    {
-        timer->start(RE_TIMEOUT);
-        qDebug() << "Client: Timer start";
-    }
-    qDebug() << "Client: Disconnected";
+    socket->close();
+    buf.clear();
+    qDebug() << "ScRemoteClient: Disconnected";
 }
 
 void ScRemoteClient::displayError(QAbstractSocket::SocketError socketError)
@@ -55,12 +96,9 @@ void ScRemoteClient::displayError(QAbstractSocket::SocketError socketError)
         return;
     }
 
-    qDebug() << tr("Network error") << tr("The following error occurred: %1.").arg(tcpClient.errorString());
-    remote_socket->close();
-    if( !(timer->isActive()) )
-    {
-        timer->start(RE_TIMEOUT);
-        qDebug() << "Timer start";
-    }
+    qDebug() << tr("Network error") << tr("The following error occurred: %1.").
+                arg(socket->errorString());
+    socket->close();
+
     emit errorConnection();
 }

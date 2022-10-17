@@ -35,11 +35,9 @@ typedef struct {
     /*  Optional, set NULL if not valid   */
     char *acl;            // file path to acl
     char *log;            // file path to log
-    int fast_open;        // enable tcp fast open
     int mode;             // enable udp relay
     int mtu;              // MTU of interface
     int mptcp;            // enable multipath TCP
-    int verbose;          // verbose mode
 } profile_t;
 
 /* An example profile
@@ -54,9 +52,7 @@ typedef struct {
  *  .timeout = 600;
  *  .acl = NULL,
  *  .log = NULL,
- *  .fast_open = 0,
  *  .mode = 0,
- *  .verbose = 0
  * };
  */
 

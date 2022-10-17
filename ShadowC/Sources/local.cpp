@@ -13,19 +13,10 @@
 #define MAX_CONNECT_TIMEOUT 10
 #define MAX_REMOTE_NUM 10
 
-int verbose    = 0;
 int tcp_incoming_sndbuf = 0;
 int tcp_incoming_rcvbuf = 0;
 int tcp_outgoing_sndbuf = 0;
 int tcp_outgoing_rcvbuf = 0;
-
-static int mode      = 0;
-static int ipv6first = 0;
-int fast_open        = 0;
-static int no_delay  = 0;
-static int udp_fd    = 0;
-static int ret_val   = 0;
-
 
 static void free_remote(remote_t *remote);
 static void free_server(server_t *server);
@@ -113,157 +104,7 @@ void ScLocal::remote_timeout_cb(int revents)
     remote_t *remote = remote_ctx->remote;
     server_t *server = remote->server;
 
-    if (verbose)
-    {
-        LOGI("TCP connection timeout");
-    }
-}
-
-void ScLocal::remote_recv_cb(int revents)
-{
-    remote_ctx_t *remote_recv_ctx = NULL;//(remote_ctx_t *)w;
-    remote_t *remote              = remote_recv_ctx->remote;
-    server_t *server              = remote->server;
-
-    ssize_t r = recv(remote->fd, server->buf->data, SOCKET_BUF_SIZE, 0);
-
-    if (r == 0)
-    {
-        // connection closed
-        return;
-    }
-    else if (r == -1)
-    {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-        {
-            // no data
-            // continue to wait for recv
-            return;
-        }
-        else
-        {
-            ERROR("remote_recv_cb_recv");
-
-            return;
-        }
-    }
-
-    server->buf->len = r;
-
-    if (!remote->direct)
-    {
-        int err = d_ctx->stream_decrypt(server->buf);
-        if (err == CRYPTO_ERROR)
-        {
-            LOGE("invalid password or cipher");
-            return;
-        }
-        else if (err == CRYPTO_NEED_MORE)
-        {
-            return; // Wait for more
-        }
-    }
-
-    int s = send(server->fd, server->buf->data, server->buf->len, 0);
-
-    if (s == -1)
-    {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-        {
-            // no data, wait for send
-            server->buf->idx = 0;
-        }
-        else
-        {
-            ERROR("remote_recv_cb_send");
-
-            return;
-        }
-    }
-    else if (s < (int)(server->buf->len))
-    {
-        server->buf->len -= s;
-        server->buf->idx  = s;
-    }
-
-    // Disable TCP_NODELAY after the first response are sent
-    if (!remote->recv_ctx->connected && !no_delay)
-    {
-        int opt = 0;
-        setsockopt(server->fd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
-        setsockopt(remote->fd, SOL_TCP, TCP_NODELAY, &opt, sizeof(opt));
-    }
-    remote->recv_ctx->connected = 1;
-}
-
-void ScLocal::remote_send_cb(int revents)
-{
-    remote_ctx_t *remote_send_ctx = NULL;//(remote_ctx_t *)w;
-    remote_t *remote              = remote_send_ctx->remote;
-    server_t *server              = remote->server;
-
-    if (!remote_send_ctx->connected)
-    {
-        struct sockaddr_storage addr;
-        socklen_t len = sizeof addr;
-        int r         = getpeername(remote->fd, (struct sockaddr *)&addr, &len);
-        if (r == 0)
-        {
-            remote_send_ctx->connected = 1;
-//            ev_timer_stop(EV_A_ & remote_send_ctx->watcher);
-//            ev_io_start(EV_A_ & remote->recv_ctx->io);
-
-            // no need to send any data
-            if (remote->buf->len == 0)
-            {
-//                ev_io_stop(EV_A_ & remote_send_ctx->io);
-//                ev_io_start(EV_A_ & server->recv_ctx->io);
-                return;
-            }
-        }
-        else
-        {
-            // not connected
-            ERROR("getpeername");
-            return;
-        }
-    }
-
-    if (remote->buf->len == 0)
-    {
-        // close and free
-        return;
-    }
-    else
-    {
-        // has data to send
-        ssize_t s = send(remote->fd, remote->buf->data + remote->buf->idx,
-                         remote->buf->len, 0);
-        if (s == -1)
-        {
-            if (errno != EAGAIN && errno != EWOULDBLOCK)
-            {
-                ERROR("remote_send_cb_send");
-                // close and free
-            }
-            return;
-        }
-        else if (s < (ssize_t)(remote->buf->len))
-        {
-            // partly sent, move memory, wait for the next time to send
-            remote->buf->len -= s;
-            remote->buf->idx += s;
-            return;
-        }
-        else
-        {
-            // all sent out, wait for reading
-            remote->buf->len = 0;
-            remote->buf->idx = 0;
-//            ev_io_stop(EV_A_ & remote_send_ctx->io);
-//            ev_io_start(EV_A_ & server->recv_ctx->io);
-        }
-    }
+    qDebug("TCP connection timeout");
 }
 
 static remote_t * new_remote(int fd, int timeout)
@@ -316,11 +157,9 @@ free_server(server_t *server)
         server->remote->server = NULL;
     }
     if (server->e_ctx != NULL) {
-        crypto->stream_ctx_release(server->e_ctx);
         ss_free(server->e_ctx);
     }
     if (server->d_ctx != NULL) {
-        crypto->stream_ctx_release(server->d_ctx);
         ss_free(server->d_ctx);
     }
     if (server->buf != NULL) {
@@ -357,11 +196,6 @@ ScLocal::ScLocal(ScSetting *st, QObject *parent) : QObject(parent)
     winsock_init();
     // Setup keys
     qDebug() << "initializing ciphers" << setting->method;
-    crypto = new ScStream(setting->password);
-    if (crypto == NULL)
-    {
-        FATAL("failed to initialize ciphers");
-    }
 
 //    listen_ctx.timeout = 100;
 //    listen_ctx.iface   = iface;

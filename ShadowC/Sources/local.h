@@ -65,8 +65,6 @@ private slots:
     void server_recv_cb(int revents);
     void server_send_cb(int revents);
     void remote_timeout_cb(int revents);
-    void remote_recv_cb(int revents);
-    void remote_send_cb(int revents);
     void accept_cb(int revents);
     void new_server(int fd);
 

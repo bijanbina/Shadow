@@ -10,12 +10,16 @@ class ScRemoteClient : public QObject
     Q_OBJECT
 public:
     explicit ScRemoteClient(ScSetting *st, QObject *parent = nullptr);
+    void open();
+    void stream();
 
+    QTcpSocket *socket;
+    QByteArray buf;
     int direct;
 
 signals:
     void errorConnection();
-    void newKey(QString key);
+    void readyData(QByteArray *read_data);
 
 private slots:
     void connected();
@@ -24,7 +28,7 @@ private slots:
     void readyRead();
 
 private:
-    QTcpSocket *remote_socket;
+    ScSetting *setting;
 };
 
 #endif // SCREMOTECLIENT_H

@@ -175,7 +175,7 @@ int ScSocks5Server::serverHandshake()
 
     if( !remote_client->direct )
     {
-        int err = e_ctx->stream_encrypt(header_buf);
+        int err = e_ctx->stream_encrypt(&header_buf);
         if( err )
         {
             LOGE("invalid password or cipher");
@@ -184,16 +184,12 @@ int ScSocks5Server::serverHandshake()
         }
     }
 
-    if (buf.length() > 0)
+    if( buf.length()>0 )
     {
-        memcpy(remote->buf->data, buf->data, buf->len);
-        remote->buf->len = buf->len;
+        remote_client->buf = buf;
     }
 
-    server->remote = remote;
-    remote->server = server;
-
-    if (buf->len > 0)
+    if( buf.length()>0 )
     {
         return 0;
     }
@@ -207,92 +203,39 @@ int ScSocks5Server::serverHandshake()
 
 void ScSocks5Server::serverStream()
 {
-    server_ctx_t *server_recv_ctx = NULL;//(server_ctx_t *)w;
-    server_t *server              = server_recv_ctx->server;
-    remote_t *remote              = server->remote;
-
-    if (remote == NULL)
+    if( remote_client==NULL )
     {
         LOGE("invalid remote");
         return;
     }
 
     // insert shadowsocks header
-    if (!remote->direct)
+    if( !remote_client->direct )
     {
 
-        int err = e_ctx->stream_encrypt(remote->buf);
+        int err = e_ctx->stream_encrypt(&remote_client->buf);
 
-        if (err)
+        if( err )
         {
             LOGE("invalid password or cipher");
             return;
         }
 
-        if (server->abuf)
+        if( header_buf.length() )
         {
-            bprepend(remote->buf, server->abuf, SOCKET_BUF_SIZE);
-            bfree(server->abuf);
-            ss_free(server->abuf);
-            server->abuf = NULL;
+            remote_client->buf.prepend(header_buf);
+            header_buf.clear();
         }
     }
 
-    if (!remote->send_ctx->connected)
+    if( !remote_client->socket->isOpen() )
     {
-        remote->buf->idx = 0;
-
-        if (fast_open==0 || remote->direct)
-        {
-            // connecting, wait until connected
-            int r = connect(remote->fd, (struct sockaddr *)&(remote->addr), remote->addr_len);
-
-            if (r == -1 && errno != CONNECT_IN_PROGRESS)
-            {
-                ERROR("connect");
-                return;
-            }
-
-            // wait on remote connected event
-//            ev_io_stop(EV_A_ & server_recv_ctx->io);
-//            ev_io_start(EV_A_ & remote->send_ctx->io);
-//            ev_timer_start(EV_A_ & remote->send_ctx->watcher);
-        }
-
+        remote_client->buf.clear();
+        remote_client->open();
     }
     else
     {
-
-        int s = send(remote->fd, remote->buf->data, remote->buf->len, 0);
-        if (s == -1)
-        {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-            {
-                // no data, wait for send
-                remote->buf->idx = 0;
-//                ev_io_stop(EV_A_ & server_recv_ctx->io);
-//                ev_io_start(EV_A_ & remote->send_ctx->io);
-                return;
-            }
-            else
-            {
-                ERROR("server_recv_cb_send");
-                return;
-            }
-        }
-        else if (s < (int)(remote->buf->len))
-        {
-            remote->buf->len -= s;
-            remote->buf->idx  = s;
-//            ev_io_stop(EV_A_ & server_recv_ctx->io);
-//            ev_io_start(EV_A_ & remote->send_ctx->io);
-            return;
-        }
-        else
-        {
-            remote->buf->idx = 0;
-            remote->buf->len = 0;
-        }
+        remote_client->stream();
     }
 }
 
@@ -341,8 +284,41 @@ void ScSocks5Server::create_remote(int direct)
 {
     remote_client = new ScRemoteClient(setting);
     remote_client->direct = direct;
+    connect(remote_client, SIGNAL(readyData(QByteArray *)), this, SLOT(remoteReadyData(QByteArray *)));
 
     qDebug() << "remote:" << setting->remote_host << setting->remote_port;
+}
+
+void ScSocks5Server::remoteReadyData(QByteArray *remote_data)
+{
+    buf = *remote_data;
+
+    if( !remote_client->direct )
+    {
+        int err = d_ctx->stream_decrypt(&buf);
+        if (err == CRYPTO_ERROR)
+        {
+            LOGE("invalid password or cipher");
+            return;
+        }
+        else if (err == CRYPTO_NEED_MORE)
+        {
+            return; // Wait for more
+        }
+    }
+
+    int s = conn->write(buf);
+
+    if( s==-1 )
+    {
+        buf.clear();
+        qDebug("remote_recv_cb_send");
+        return;
+    }
+    else if( s<buf.length() )
+    {
+        buf.remove(0, s);
+    }
 }
 
 void ScSocks5Server::readyRead()
@@ -370,7 +346,7 @@ void ScSocks5Server::readyRead()
         }
         else if( stage==STAGE_STREAM )
         {
-            server_stream(buf);
+            serverStream();
 
             // all processed
             return;

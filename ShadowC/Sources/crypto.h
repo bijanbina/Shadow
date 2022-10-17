@@ -40,10 +40,6 @@
 #define CRYPTO_ERROR     -2
 #define CRYPTO_NEED_MORE -1
 #define CRYPTO_OK         0
-
-#define min(a, b) (((a) < (b)) ? (a) : (b))
-#define max(a, b) (((a) > (b)) ? (a) : (b))
-
 #define SUBKEY_INFO "ss-subkey"
 #define IV_INFO "ss-iv"
 
@@ -91,15 +87,10 @@ typedef struct {
 
 
 int balloc(buffer_t *, size_t);
-int brealloc(buffer_t *, size_t, size_t);
-int bprepend(buffer_t *, buffer_t *, size_t);
 void bfree(buffer_t *);
 int rand_bytes(void *, int);
 
 unsigned char *crypto_md5(const unsigned char *, size_t, unsigned char *);
-
-int crypto_derive_key(const char *, uint8_t *, size_t);
-int crypto_parse_key(const char *, uint8_t *, size_t);
 
 extern struct cache *nonce_cache;
 extern char *supported_stream_ciphers;
