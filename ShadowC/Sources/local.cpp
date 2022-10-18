@@ -62,16 +62,6 @@ void ScLocal::server_send_cb()
 {
 }
 
-void ScLocal::remote_timeout_cb()
-{
-    remote_ctx_t *remote_ctx = NULL;// cork_container_of(watcher, remote_ctx_t, watcher);
-
-    remote_t *remote = remote_ctx->remote;
-    server_t *server = remote->server;
-
-    qDebug("TCP connection timeout");
-}
-
 void ScLocal::connected()
 {
     qDebug() << "Server: Accepted connection";

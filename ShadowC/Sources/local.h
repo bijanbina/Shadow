@@ -62,7 +62,6 @@ public:
 private slots:
     void delayed_connect_cb();
     void server_send_cb();
-    void remote_timeout_cb();
     void connected();
 
 signals:

@@ -6,9 +6,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include "qaesencryption.h"
 
-#define STREAM_CIPHER_NUM  21
 #define AES_256_KLEN       32
+#define AES_256_IVLEN      16
 #include "crypto.h"
 
 
@@ -23,8 +24,9 @@ public:
     int stream_decrypt(QByteArray *);
 
 private:
-    std::vector<unsigned char> key;
-    unsigned char iv[16];
+    QAESEncryption *encryption;
+    QByteArray key;
+    QByteArray iv;
 };
 
 #endif // _STREAM_H
