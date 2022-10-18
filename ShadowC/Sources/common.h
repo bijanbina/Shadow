@@ -19,7 +19,6 @@ typedef struct ScSetting {
     int local_port;
     int remote_port;
     QString password;
-    QString method;
     QString remote_host;
 } ScSetting;
 

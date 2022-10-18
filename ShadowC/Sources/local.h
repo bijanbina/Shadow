@@ -50,7 +50,6 @@ typedef struct remote {
     struct remote_ctx *recv_ctx;
     struct remote_ctx *send_ctx;
     struct server *server;
-    struct sockaddr_storage addr;
 } remote_t;
 
 class ScLocal : public QObject
@@ -61,12 +60,10 @@ public:
     ~ScLocal();
 
 private slots:
-    void delayed_connect_cb(int revents);
-    void server_recv_cb(int revents);
-    void server_send_cb(int revents);
-    void remote_timeout_cb(int revents);
-    void accept_cb(int revents);
-    void new_server(int fd);
+    void delayed_connect_cb();
+    void server_send_cb();
+    void remote_timeout_cb();
+    void connected();
 
 signals:
     void errorConnection();

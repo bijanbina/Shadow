@@ -18,31 +18,6 @@
 #define USE_SYSLOG(ident, _cond)
 #define USE_LOGFILE(ident)
 #define TIME_FORMAT "%Y-%m-%d %H:%M:%S"
-#define LOGI(format, ...)                                    \
-    do {                                                     \
-        time_t now = time(NULL);                             \
-        char timestr[20];                                    \
-        strftime(timestr, 20, TIME_FORMAT, localtime(&now)); \
-        ss_color_info();                                     \
-        fprintf(stdout, " %s INFO: ", timestr);              \
-        ss_color_reset();                                    \
-        fprintf(stdout, format "\n", ## __VA_ARGS__);        \
-        fflush(stdout);                                      \
-    }                                                        \
-    while (0)
-
-#define LOGE(format, ...)                                     \
-    do {                                                      \
-        time_t now = time(NULL);                              \
-        char timestr[20];                                     \
-        strftime(timestr, 20, TIME_FORMAT, localtime(&now));  \
-        ss_color_error();                                     \
-        fprintf(stderr, " %s ERROR: ", timestr);              \
-        ss_color_reset();                                     \
-        fprintf(stderr, format "\n", ## __VA_ARGS__);         \
-        fflush(stderr);                                       \
-    }                                                         \
-    while (0)
 
 // Workaround for "%z" in Windows printf
 #ifdef __MINGW32__
@@ -59,7 +34,6 @@ void ss_color_reset(void);
 char *ss_itoa(int i);
 int ss_isnumeric(const char *s);
 int run_as(const char *user);
-void FATAL(const char *msg);
 void usage(void);
 void daemonize(const char *path);
 char *ss_strndup(const char *s, size_t n);

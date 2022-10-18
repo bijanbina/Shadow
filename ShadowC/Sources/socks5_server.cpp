@@ -1,6 +1,5 @@
 #include "socks5_server.h"
-
-char sc_password[] = "pass";
+#include <in6addr.h>
 
 ScSocks5Server::ScSocks5Server(ScSetting *st, QTcpSocket *cs, QObject *parent) : QObject(parent)
 {
@@ -12,9 +11,14 @@ ScSocks5Server::ScSocks5Server(ScSetting *st, QTcpSocket *cs, QObject *parent) :
     connect(conn, SIGNAL(error(QAbstractSocket::SocketError)),
             this, SLOT(displayError(QAbstractSocket::SocketError)));
     stage = STAGE_INIT;
-    e_ctx = new ScStream(sc_password);
-    d_ctx = new ScStream(sc_password);
+    e_ctx = new ScStream(setting->password);
+    d_ctx = new ScStream(setting->password);
     remote_client = NULL;
+}
+
+ScSocks5Server::~ScSocks5Server()
+{
+    ;
 }
 
 int ScSocks5Server::serverInit()
@@ -106,10 +110,6 @@ int ScSocks5Server::serverHandshake()
         return -1;
     }
 
-    char host[MAX_HOSTNAME_LEN + 1];
-    char ip[INET6_ADDRSTRLEN];
-    char port[16];
-
     header_buf.clear();
     int atyp = request->atyp;
     header_buf.append(atyp);
@@ -169,7 +169,7 @@ int ScSocks5Server::serverHandshake()
 
     if( remote_client==NULL )
     {
-        LOGE("invalid remote addr");
+        qDebug("invalid remote addr");
         return -1;
     }
 
@@ -178,7 +178,7 @@ int ScSocks5Server::serverHandshake()
         int err = e_ctx->stream_encrypt(&header_buf);
         if( err )
         {
-            LOGE("invalid password or cipher");
+            qDebug("invalid password or cipher");
 
             return -1;
         }
@@ -205,7 +205,7 @@ void ScSocks5Server::serverStream()
 {
     if( remote_client==NULL )
     {
-        LOGE("invalid remote");
+        qDebug("invalid remote");
         return;
     }
 
@@ -217,7 +217,7 @@ void ScSocks5Server::serverStream()
 
         if( err )
         {
-            LOGE("invalid password or cipher");
+            qDebug("invalid password or cipher");
             return;
         }
 
@@ -248,7 +248,6 @@ int ScSocks5Server::server_handshake_reply(int udp_assc, struct socks5_response 
 
     struct sockaddr_in sock_addr;
 
-
     buffer_t resp_to_send;
     buffer_t *resp_buf = &resp_to_send;
     balloc(resp_buf, SOCKET_BUF_SIZE);
@@ -269,7 +268,7 @@ int ScSocks5Server::server_handshake_reply(int udp_assc, struct socks5_response 
 
     if (s < reply_size)
     {
-        LOGE("failed to send fake reply");
+        qDebug("failed to send fake reply");
         return -1;
     }
     if (udp_assc)
@@ -298,7 +297,7 @@ void ScSocks5Server::remoteReadyData(QByteArray *remote_data)
         int err = d_ctx->stream_decrypt(&buf);
         if (err == CRYPTO_ERROR)
         {
-            LOGE("invalid password or cipher");
+            qDebug("invalid password or cipher");
             return;
         }
         else if (err == CRYPTO_NEED_MORE)

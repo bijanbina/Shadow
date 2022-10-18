@@ -29,14 +29,6 @@ ss_strndup(const char *s, size_t n)
     ret[n] = '\0';
     return ret;
 }
-
-void
-FATAL(const char *msg)
-{
-    LOGE("%s", msg);
-    exit(-1);
-}
-
 void *
 ss_malloc(size_t size)
 {

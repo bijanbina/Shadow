@@ -2,6 +2,7 @@
 #define SCLOCALSERVER_H
 
 #include <QHostAddress>
+#include <QDebug>
 #include "winsock.h"
 #include "stream.h"
 #include "crypto.h"

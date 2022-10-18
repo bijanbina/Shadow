@@ -57,8 +57,7 @@ HEADERS += \
     Sources/socks5_server.h \
     Sources/stream.h \
     Sources/uthash.h \
-    Sources/utils.h \
-    Sources/winsock.h
+    Sources/utils.h
 
 SOURCES += \
     Sources/base64.cpp \
@@ -69,7 +68,6 @@ SOURCES += \
     Sources/remote_client.cpp \
     Sources/socks5_server.cpp \
     Sources/stream.cpp \
-    Sources/utils.cpp \
-    Sources/winsock.cpp
+    Sources/utils.cpp
 
 
