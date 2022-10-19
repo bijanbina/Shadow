@@ -24,7 +24,7 @@ void ScRemoteClient::stream()
     if (s == -1)
     {
         buf.clear();
-        qDebug("server_recv_cb_send");
+        qDebug("server_recv_cb_send write err");
         return;
     }
     else if( s<buf.length() )
@@ -54,11 +54,13 @@ void ScRemoteClient::connected()
     else
     {
         // has data to send
-        qDebug() << "we have data to send";
         ssize_t s = socket->write(buf);
+        qDebug() << "we have data to send"
+                 << buf.length() << s;
 
         if (s == -1)
         {
+            qDebug() << "Error: socket->write(buf)";
             return;
         }
         else if( s<buf.length() )

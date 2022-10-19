@@ -23,7 +23,7 @@ ScSocks5Server::~ScSocks5Server()
 
 int ScSocks5Server::serverInit()
 {
-    qDebug() << "connection from"
+    qDebug() << "serverInit from"
              << conn->peerAddress().toString()
              << conn->peerPort();
 
@@ -201,7 +201,7 @@ int ScSocks5Server::serverHandshake()
 
     if( soc_buf.length()>0 )
     {
-        qDebug() << "buf length > 0 : serverHandshake";
+        qDebug() << "server Handshake: buf length > 0";
         remote_client->socket->write(soc_buf);
         return 0;
     }
@@ -231,17 +231,8 @@ void ScSocks5Server::serverStream()
 
         if( header_buf.length() )
         {
-
-            if( remote_client->socket->isOpen() )
-            {
-                qDebug() << "serverStream : sending header -> open";
-                remote_client->socket->write(header_buf);
-            }
-            else
-            {
-                qDebug() << "serverStream : not open";
-                remote_client->buf = header_buf;
-            }
+            qDebug() << "serverStream : header_buf";
+            remote_client->buf.prepend(header_buf);
             header_buf.clear();
         }
     }
@@ -341,7 +332,18 @@ void ScSocks5Server::remoteReadyData(QByteArray *remote_data)
 
 void ScSocks5Server::readyRead()
 {
-    soc_buf += conn->readAll();
+    QByteArray read_data = conn->readAll();
+
+    if( remote_client==NULL )
+    {
+       soc_buf.append(read_data);
+       qDebug() << "readyRead: soc_buf" << soc_buf.length();
+    }
+    else
+    {
+        remote_client->buf.append(read_data);
+        qDebug() << "readyRead: soc_buf(remote)" << remote_client->buf.length();
+    }
 
     while(1)
     {
@@ -367,7 +369,6 @@ void ScSocks5Server::readyRead()
         {
             serverStream();
 
-            // all processed
             return;
         }
     }

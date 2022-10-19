@@ -20,8 +20,8 @@ public:
     explicit ScStream(QString pass, QObject *parent = nullptr);
     ~ScStream();
 
-    int stream_encrypt(QByteArray *);
-    int stream_decrypt(QByteArray *);
+    int stream_encrypt(QByteArray *plain_text);
+    int stream_decrypt(QByteArray *cipher_text);
 
 private:
     QAESEncryption *encryption;
