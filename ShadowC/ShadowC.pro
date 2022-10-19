@@ -50,7 +50,7 @@ HEADERS += \
     Sources/crypto.h \
     Sources/local.h \
     Sources/netutils.h \
-    Sources/plusaes/plusaes.hpp \
+    Sources/qaesencryption.h \
     Sources/remote_client.h \
     Sources/shadowsocks.h \
     Sources/socks5.h \
@@ -65,6 +65,7 @@ SOURCES += \
     Sources/local.cpp \
     Sources/main.cpp \
     Sources/netutils.cpp \
+    Sources/qaesencryption.cpp \
     Sources/remote_client.cpp \
     Sources/socks5_server.cpp \
     Sources/stream.cpp \
