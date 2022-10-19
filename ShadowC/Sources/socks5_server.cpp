@@ -186,7 +186,16 @@ int ScSocks5Server::serverHandshake()
         uint16_t port;
         port = (uint8_t)header_buf.at(5) << 8;
         port += (uint8_t)header_buf.at(6);
-        qDebug() << "serverHandshake: header_buf(UNENC)"
+
+        QString ip_address;
+        ip_address += QString::number((uint8_t)header_buf.at(1));
+        ip_address += ".";
+        ip_address += QString::number((uint8_t)header_buf.at(2));
+        ip_address += ".";
+        ip_address += QString::number((uint8_t)header_buf.at(3));
+        ip_address += ".";
+        ip_address += QString::number((uint8_t)header_buf.at(4));
+        qDebug() << "serverHandshake: header: " << ip_address
                  << port << header_buf.length();
         chertChapkon(&header_buf);
         int err = e_ctx->stream_encrypt(&header_buf);
@@ -316,6 +325,8 @@ void ScSocks5Server::remoteReadyData(QByteArray *remote_data)
         }
     }
 
+
+    qDebug() << "remote ReadyData: rc_buf" << soc_buf.length();
     int s = conn->write(soc_buf);
 
     if( s==-1 )
