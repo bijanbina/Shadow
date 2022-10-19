@@ -3,6 +3,7 @@
 ScRemoteClient::ScRemoteClient(ScSetting *st, QObject *parent) : QObject(parent)
 {
     setting = st;
+    socket = new QTcpSocket();
     connect(socket, SIGNAL(connected()), this, SLOT(connected()));
     connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
     connect(socket, SIGNAL(error(QAbstractSocket::SocketError)),
@@ -16,6 +17,8 @@ void ScRemoteClient::open()
 
 void ScRemoteClient::stream()
 {
+    qDebug() << "stream :" << buf.length();
+
     int s = socket->write(buf);
 
     if (s == -1)
@@ -45,11 +48,13 @@ void ScRemoteClient::connected()
 
     if( buf.length()==0 )
     {
+        qDebug() << "Error: client buf lenght is 0 : ScRemoteClient";
         return;
     }
     else
     {
         // has data to send
+        qDebug() << "we have data to send";
         ssize_t s = socket->write(buf);
 
         if (s == -1)

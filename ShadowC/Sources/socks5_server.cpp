@@ -27,24 +27,24 @@ int ScSocks5Server::serverInit()
              << conn->peerAddress().toString()
              << conn->peerPort();
 
-    if (buf.length() < 1)
+    if (soc_buf.length() < 1)
     {
         qDebug() << "server_init: len < 1";
         return 1;
     }
-    if ( buf.at(0)!=SVERSION )
+    if ( soc_buf.at(0)!=SVERSION )
     {
-        qDebug() << "server_init: buf[0]: " << buf.at(0)
+        qDebug() << "server_init: buf[0]: " << soc_buf.at(0)
                  << "!= SVERSION: " << SVERSION;
         return 1;
     }
-    if (buf.length() < sizeof(struct method_select_request))
+    if (soc_buf.length() < sizeof(struct method_select_request))
     {
         return 1;
     }
-    struct method_select_request *method = (struct method_select_request *)buf.data();
+    struct method_select_request *method = (struct method_select_request *)soc_buf.data();
     int method_len                       = method->nmethods + sizeof(struct method_select_request);
-    if( buf.length()<method_len )
+    if( soc_buf.length()<method_len )
     {
         return 1;
     }
@@ -69,23 +69,24 @@ int ScSocks5Server::serverInit()
 
     stage = STAGE_HANDSHAKE;
 
-    if( method_len<buf.length() )
+    if( method_len<soc_buf.length() )
     {
-        buf.remove(0, method_len);
+        soc_buf.remove(0, method_len);
         return 0;
     }
 
-    buf.clear();
+    soc_buf.clear();
     return 1;
 }
 
 int ScSocks5Server::serverHandshake()
 {
-    struct socks5_request *request = (struct socks5_request *)buf.data();
+    struct socks5_request *request = (struct socks5_request *)soc_buf.data();
     size_t request_len             = sizeof(struct socks5_request);
 
-    if( buf.length()<request_len )
+    if( soc_buf.length()<request_len )
     {
+        qDebug() << "Error: buf length is small";
         return -1;
     }
 
@@ -118,30 +119,36 @@ int ScSocks5Server::serverHandshake()
     if( atyp==SOCKS5_ATYP_IPV4 )
     {
         size_t in_addr_len = sizeof(struct in_addr);
-        if (buf.length() < request_len + in_addr_len + 2)
+        qDebug() << "SOCKS5_ATYP_IPV4 addrtype:" << request->cmd;
+        if (soc_buf.length() < request_len + in_addr_len + 2)
         {
+            qDebug() << "Error: buf length is small : SOCKS5_ATYP_IPV4";
             return -1;
         }
-        header_buf.append(buf.data() + request_len, in_addr_len + 2);
+        header_buf.append(soc_buf.data() + request_len, in_addr_len + 2);
     }
     else if( atyp==SOCKS5_ATYP_DOMAIN )
     {
-        uint8_t name_len = *(uint8_t *)(buf.data() + request_len);
-        if( buf.length()<request_len+1+name_len+2 )
+        qDebug() << "SOCKS5_ATYP_DOMAIN addrtype:";
+        uint8_t name_len = *(uint8_t *)(soc_buf.data() + request_len);
+        if( soc_buf.length()<request_len+1+name_len+2 )
         {
+            qDebug() << "Error: buf length is small : SOCKS5_ATYP_DOMAIN";
             return -1;
         }
         header_buf.append(name_len);
-        header_buf.append(buf.data() + request_len + 1, name_len + 2);
+        header_buf.append(soc_buf.data() + request_len + 1, name_len + 2);
     }
     else if (atyp == SOCKS5_ATYP_IPV6)
     {
+        qDebug() << "SOCKS5_ATYP_IPV6 addrtype:";
         size_t in6_addr_len = sizeof(struct in6_addr);
-        if( buf.length()<request_len+in6_addr_len+2 )
+        if( soc_buf.length()<request_len+in6_addr_len+2 )
         {
+            qDebug() << "Error: buf length is small : SOCKS5_ATYP_IPV6";
             return -1;
         }
-        header_buf.append(buf.data() + request_len, in6_addr_len + 2);
+        header_buf.append(soc_buf.data() + request_len, in6_addr_len + 2);
     }
     else
     {
@@ -159,11 +166,12 @@ int ScSocks5Server::serverHandshake()
     }
     stage = STAGE_STREAM;
 
-    buf.remove(0,3+header_buf.length());
+    soc_buf.remove(0,3+header_buf.length());
 
     // Not bypass
     if( remote_client==NULL )
     {
+        qDebug() << "creating remote_client";
         create_remote(0);
     }
 
@@ -175,7 +183,14 @@ int ScSocks5Server::serverHandshake()
 
     if( !remote_client->direct )
     {
+        uint16_t port;
+        port = (uint8_t)header_buf.at(5) << 8;
+        port += (uint8_t)header_buf.at(6);
+        qDebug() << "serverHandshake: header_buf(UNENC)"
+                 << port << header_buf.length();
+        chertChapkon(&header_buf);
         int err = e_ctx->stream_encrypt(&header_buf);
+        chertChapkon(&header_buf);
         if( err )
         {
             qDebug("invalid password or cipher");
@@ -184,18 +199,11 @@ int ScSocks5Server::serverHandshake()
         }
     }
 
-    if( buf.length()>0 )
+    if( soc_buf.length()>0 )
     {
-        remote_client->buf = buf;
-    }
-
-    if( buf.length()>0 )
-    {
+        qDebug() << "buf length > 0 : serverHandshake";
+        remote_client->socket->write(soc_buf);
         return 0;
-    }
-    else
-    {
-//        ev_timer_start(EV_A_ & server->delayed_connect_watcher);
     }
 
     return -1;
@@ -212,7 +220,7 @@ void ScSocks5Server::serverStream()
     // insert shadowsocks header
     if( !remote_client->direct )
     {
-
+        qDebug() << "server stream: rc_buf" << remote_client->buf.length();
         int err = e_ctx->stream_encrypt(&remote_client->buf);
 
         if( err )
@@ -223,19 +231,30 @@ void ScSocks5Server::serverStream()
 
         if( header_buf.length() )
         {
-            remote_client->buf.prepend(header_buf);
+
+            if( remote_client->socket->isOpen() )
+            {
+                qDebug() << "serverStream : sending header -> open";
+                remote_client->socket->write(header_buf);
+            }
+            else
+            {
+                qDebug() << "serverStream : not open";
+                remote_client->buf = header_buf;
+            }
             header_buf.clear();
         }
     }
 
-    if( !remote_client->socket->isOpen() )
+    if( remote_client->socket->isOpen() )
     {
-        remote_client->buf.clear();
-        remote_client->open();
+        qDebug() << "remote_client->stream()";
+        remote_client->stream();
     }
     else
     {
-        remote_client->stream();
+        qDebug() << "sever stream: remote is not open";
+        remote_client->open();
     }
 }
 
@@ -290,11 +309,11 @@ void ScSocks5Server::create_remote(int direct)
 
 void ScSocks5Server::remoteReadyData(QByteArray *remote_data)
 {
-    buf = *remote_data;
+    soc_buf = *remote_data;
 
     if( !remote_client->direct )
     {
-        int err = d_ctx->stream_decrypt(&buf);
+        int err = d_ctx->stream_decrypt(&soc_buf);
         if (err == CRYPTO_ERROR)
         {
             qDebug("invalid password or cipher");
@@ -306,23 +325,23 @@ void ScSocks5Server::remoteReadyData(QByteArray *remote_data)
         }
     }
 
-    int s = conn->write(buf);
+    int s = conn->write(soc_buf);
 
     if( s==-1 )
     {
-        buf.clear();
+        soc_buf.clear();
         qDebug("remote_recv_cb_send");
         return;
     }
-    else if( s<buf.length() )
+    else if( s<soc_buf.length() )
     {
-        buf.remove(0, s);
+        soc_buf.remove(0, s);
     }
 }
 
 void ScSocks5Server::readyRead()
 {
-    buf += conn->readAll();
+    soc_buf += conn->readAll();
 
     while(1)
     {
@@ -330,6 +349,7 @@ void ScSocks5Server::readyRead()
         if( stage==STAGE_INIT )
         {
             int ret = serverInit();
+            qDebug()<< "Stage init"<< ret;
             if( ret )
             {
                 return;
@@ -351,12 +371,6 @@ void ScSocks5Server::readyRead()
             return;
         }
     }
-
-
-//    qDebug() << QString("Ack, Receive Byte: %1").arg(bytesReceived);
-//    connection_socket->write("a",1);
-//    connection_socket->waitForBytesWritten(50);
-    emit readyData(buf);
 }
 
 void ScSocks5Server::displayError(QAbstractSocket::SocketError socketError)
@@ -367,4 +381,24 @@ void ScSocks5Server::displayError(QAbstractSocket::SocketError socketError)
     }
 
     qDebug() << QString("Error Happened");
+}
+
+void ScSocks5Server::chertChapkon(QByteArray *data)
+{
+    int i;
+    QString lolo;
+
+    lolo += "length =" + QString::number(data->length()) + "; ";
+    for ( i=0 ; i< data->length() ; i++)
+    {
+        if( data->at(i)>31 && data->at(i)<128 )
+        {
+            lolo += data->at(i);
+        }
+        else
+        {
+            lolo += "*";
+        }
+    }
+    qDebug() << "chert_print:" << lolo;
 }

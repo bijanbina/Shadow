@@ -26,20 +26,18 @@ public slots:
     void displayError(QAbstractSocket::SocketError socketError);
     void remoteReadyData(QByteArray *remote_data);
 
-signals:
-    void readyData(QByteArray data);
-
 private:
     int serverInit();
     int serverHandshake();
     void serverStream();
     void create_remote(int direct);
-    int server_handshake_reply(int udp_assc, struct socks5_response *response);
+    int  server_handshake_reply(int udp_assc, struct socks5_response *response);
+    void chertChapkon(QByteArray *data);
 
     QTcpSocket *conn;
     ScRemoteClient *remote_client;
     ScSetting *setting;
-    QByteArray buf;
+    QByteArray soc_buf;
     QByteArray header_buf;
     int stage;
 };
