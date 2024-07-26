@@ -11,12 +11,17 @@ int main(int argc, char *argv[])
     app.setApplicationName("PolyBar");
 
     ScSetting *setting = new ScSetting();
-    setting->local_port = 1088;
-    setting->remote_port = 443;
-    setting->password = "pass";
-//    setting->method = "aes-256-cfb";
+    setting->is_server   = 0;
+    setting->local_port  = 1088;
+    setting->remote_port = 5512;
+    setting->password    = "pass";
+//    setting->method    = "aes-256-cfb";
     setting->remote_host = "5.255.113.20";
 
+    if( argc>1 )
+    {
+        setting->is_server = 1;
+    }
     ScLocal local(setting);
 
     return app.exec();

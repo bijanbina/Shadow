@@ -1,5 +1,5 @@
-#ifndef _COMMON_H
-#define _COMMON_H
+#ifndef SC_BACKEND_H
+#define SC_BACKEND_H
 
 #ifndef SOL_TCP
 #define SOL_TCP IPPROTO_TCP
@@ -15,11 +15,13 @@
 #define STAGE_STREAM     5  /* Stream between client and server */
 #define STAGE_STOP       6  /* Server stop to response          */
 
-typedef struct ScSetting {
+typedef struct ScSetting
+{
+    int is_server;
     int local_port;
     int remote_port;
     QString password;
     QString remote_host;
 } ScSetting;
 
-#endif // _COMMON_H
+#endif // SC_BACKEND_H

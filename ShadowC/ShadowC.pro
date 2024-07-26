@@ -45,13 +45,15 @@ OBJECTS_DIR = Build/.obj
 UI_DIR = Build/.ui
 
 HEADERS += \
+    Sources/backend.h \
     Sources/base64.h \
-    Sources/common.h \
     Sources/crypto.h \
     Sources/local.h \
     Sources/netutils.h \
     Sources/qaesencryption.h \
     Sources/remote_client.h \
+    Sources/sc_apache_se \
+    Sources/sc_apache_se.h \
     Sources/shadowsocks.h \
     Sources/socks5.h \
     Sources/socks5_server.h \
@@ -67,6 +69,7 @@ SOURCES += \
     Sources/netutils.cpp \
     Sources/qaesencryption.cpp \
     Sources/remote_client.cpp \
+    Sources/sc_apache_se.cpp \
     Sources/socks5_server.cpp \
     Sources/stream.cpp \
     Sources/utils.cpp

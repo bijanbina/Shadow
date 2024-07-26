@@ -3,7 +3,7 @@
 
 #include <QTcpServer>
 #include <QTcpSocket>
-#include "common.h"
+#include "backend.h"
 
 class ScRemoteClient : public QObject
 {
@@ -12,21 +12,15 @@ public:
     explicit ScRemoteClient(ScSetting *st,
                             QObject *parent = nullptr);
     void open();
-    void stream();
+    void writeBuf();
 
     QTcpSocket *remote;
     QByteArray  buf;
-    int direct;
-
-signals:
-    void errorConnection();
-    void readyData(QByteArray *read_data);
+    int         direct;
 
 private slots:
-    void connected();
     void disconnected();
     void displayError(QAbstractSocket::SocketError socketError);
-    void readyRead();
 
 private:
     ScSetting *setting;
