@@ -5,7 +5,8 @@
 #include <QDebug>
 #include "socks5_server.h"
 
-typedef struct listen_ctx {
+typedef struct listen_ctx
+{
     int remote_num;
     char *iface;
     int timeout;
@@ -15,12 +16,14 @@ typedef struct listen_ctx {
     QString address;
 } listen_ctx_t;
 
-typedef struct server_ctx {
+typedef struct server_ctx
+{
     int connected;
     struct server *server;
 } server_ctx_t;
 
-typedef struct server {
+typedef struct server
+{
     int fd;
     int stage;
 
@@ -35,12 +38,14 @@ typedef struct server {
     buffer_t *abuf;
 } server_t;
 
-typedef struct remote_ctx {
+typedef struct remote_ctx
+{
     int connected;
     struct remote *remote;
 } remote_ctx_t;
 
-typedef struct remote {
+typedef struct remote
+{
     int fd;
     int direct;
     int addr_len;
@@ -57,11 +62,8 @@ class ScLocal : public QObject
     Q_OBJECT
 public:
     explicit ScLocal(ScSetting *st, QObject *parent = nullptr);
-    ~ScLocal();
 
 private slots:
-    void delayed_connect_cb();
-    void server_send_cb();
     void connected();
 
 signals:
@@ -70,9 +72,8 @@ signals:
     void clientConnected();
 
 private:
-    void listen_local(int port);
+    void listen_local();
 
-    std::vector<unsigned char> key;
     QTcpServer *server;
     ScSocks5Server *socks5_server;
     ScSetting *setting;

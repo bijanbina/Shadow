@@ -15,9 +15,9 @@ int main(int argc, char *argv[])
     setting->remote_port = 443;
     setting->password = "pass";
 //    setting->method = "aes-256-cfb";
-    setting->remote_host = "85.10.139.67";
+    setting->remote_host = "5.255.113.20";
 
-    ScLocal *local = new ScLocal(setting);
+    ScLocal local(setting);
 
     return app.exec();
 }
