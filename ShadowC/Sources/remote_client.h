@@ -1,5 +1,5 @@
-#ifndef SCREMOTECLIENT_H
-#define SCREMOTECLIENT_H
+#ifndef SC_REMOTECLIENT_H
+#define SC_REMOTECLIENT_H
 
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -9,12 +9,13 @@ class ScRemoteClient : public QObject
 {
     Q_OBJECT
 public:
-    explicit ScRemoteClient(ScSetting *st, QObject *parent = nullptr);
+    explicit ScRemoteClient(ScSetting *st,
+                            QObject *parent = nullptr);
     void open();
     void stream();
 
-    QTcpSocket *socket;
-    QByteArray buf;
+    QTcpSocket *remote;
+    QByteArray  buf;
     int direct;
 
 signals:
@@ -31,4 +32,4 @@ private:
     ScSetting *setting;
 };
 
-#endif // SCREMOTECLIENT_H
+#endif // SC_REMOTECLIENT_H

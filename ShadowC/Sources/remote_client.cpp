@@ -1,14 +1,18 @@
 #include "remote_client.h"
 
-ScRemoteClient::ScRemoteClient(ScSetting *st, QObject *parent) : QObject(parent)
+ScRemoteClient::ScRemoteClient(ScSetting *st, QObject *parent):
+    QObject(parent)
 {
     setting = st;
-    socket = new QTcpSocket();
-    connect(socket, SIGNAL(connected()), this, SLOT(connected()));
-    connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
-    connect(socket, SIGNAL(error(QAbstractSocket::SocketError)),
+    remote = new QTcpSocket();
+    connect(remote, SIGNAL(connected()),
+            this,   SLOT  (connected()));
+    connect(remote, SIGNAL(disconnected()),
+            this,   SLOT  (disconnected()));
+    connect(remote, SIGNAL(error(QAbstractSocket::SocketError)),
             this, SLOT(displayError(QAbstractSocket::SocketError)));
 }
+
 void ScRemoteClient::open()
 {
     qDebug() << "ScRemoteClient, connecting to:" << setting->remote_host << setting->remote_port;
@@ -91,21 +95,22 @@ void ScRemoteClient::readyRead()
 
 void ScRemoteClient::disconnected()
 {
-    socket->close();
+    remote->close();
     buf.clear();
     qDebug() << "ScRemoteClient: Disconnected";
 }
 
-void ScRemoteClient::displayError(QAbstractSocket::SocketError socketError)
+void ScRemoteClient::displayError(
+        QAbstractSocket::SocketError socketError)
 {
     if( socketError==QTcpSocket::RemoteHostClosedError )
     {
         return;
     }
 
-    qDebug() << tr("Network error") << tr("The following error occurred: %1.").
-                arg(socket->errorString());
-    socket->close();
+    qDebug() << "Network error The following error occurred"
+             << remote->errorString();
+    remote->close();
 
     emit errorConnection();
 }

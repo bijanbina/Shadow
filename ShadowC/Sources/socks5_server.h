@@ -15,7 +15,8 @@ class ScSocks5Server : public QObject
 {
     Q_OBJECT
 public:
-    explicit ScSocks5Server(ScSetting *st, QTcpSocket *cs, QObject *parent = nullptr);
+    explicit ScSocks5Server(ScSetting *st, QTcpSocket *cs,
+                            QObject *parent = nullptr);
     ~ScSocks5Server();
 
     ScStream *e_ctx;
@@ -27,11 +28,12 @@ public slots:
     void remoteReadyData(QByteArray *remote_data);
 
 private:
-    int serverInit();
-    int serverHandshake();
+    int  serverInit();
+    int  serverHandshake();
     void serverStream();
     void create_remote(int direct);
-    int  server_handshake_reply(int udp_assc, struct socks5_response *response);
+    int  server_handshake_reply(int udp_assc,
+                                struct socks5_response *response);
     void chertChapkon(QByteArray *data);
 
     QTcpSocket *conn;

@@ -211,7 +211,7 @@ int ScSocks5Server::serverHandshake()
     if( soc_buf.length()>0 )
     {
         qDebug() << "server Handshake: buf length > 0";
-        remote_client->socket->write(soc_buf);
+        remote_client->remote->write(soc_buf);
         return 0;
     }
 
@@ -246,7 +246,7 @@ void ScSocks5Server::serverStream()
         }
     }
 
-    if( remote_client->socket->isOpen() )
+    if( remote_client->remote->isOpen() )
     {
         qDebug() << "remote_client->stream()";
         remote_client->stream();
