@@ -4,6 +4,7 @@
 #include <QString>
 #include <QDebug>
 #include "socks5_server.h"
+#include "sc_apache_se.h"
 
 typedef struct listen_ctx
 {
@@ -72,7 +73,8 @@ signals:
     void clientConnected();
 
 private:
-    void listen_local();
+    void listenLocal();
+    void testTX();
 
     QTcpServer *server;
     ScSocks5Server *socks5_server;

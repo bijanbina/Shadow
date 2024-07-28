@@ -17,11 +17,19 @@ ScLocal::ScLocal(ScSetting *st, QObject *parent):
     QObject(parent)
 {
     setting = st;
-    listen_local();
-    qDebug("listening at port %d", setting->local_port);
+//    listen_local();
+    if( setting->is_server )
+    {
+        ScApacheSe server;
+        server().bind(setting->remote_port);
+    }
+    else
+    {
+        testTX();
+    }
 }
 
-void ScLocal::listen_local()
+void ScLocal::listenLocal()
 {
     server = new QTcpServer;
     connect(server, SIGNAL(newConnection()),
@@ -46,3 +54,17 @@ void ScLocal::connected()
                         server->nextPendingConnection());
 }
 
+void ScLocal::testTX()
+{
+    ScRemoteClient client(setting);
+
+    int len = 1000;
+    for( int i=0 ; i<len ; i++ )
+    {
+        client.buf += "<";
+        client.buf += QString::number(i);
+        client.buf += ">";
+    }
+
+    client.writeBuf();
+}
