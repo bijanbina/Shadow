@@ -1,11 +1,9 @@
-#include <QApplication>
+#include <QCoreApplication>
 #include "local.h"
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-
-    QApplication app(argc, argv);
+    QCoreApplication app(argc, argv);
     app.setOrganizationName("WBT");
     app.setOrganizationDomain("WBT.com");
     app.setApplicationName("PolyBar");

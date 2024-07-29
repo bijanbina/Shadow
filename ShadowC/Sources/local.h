@@ -1,11 +1,15 @@
-#ifndef _LOCAL_H
-#define _LOCAL_H
+#ifndef SC_LOCAL_H
+#define SC_LOCAL_H
 
 #include <QString>
 #include <QDebug>
+#ifdef WIN32
 #include "socks5_server.h"
+#endif
+#include "remote_client.h"
 #include "sc_apache_se.h"
 
+#ifdef WIN32
 typedef struct listen_ctx
 {
     int remote_num;
@@ -57,6 +61,7 @@ typedef struct remote
     struct remote_ctx *send_ctx;
     struct server *server;
 } remote_t;
+#endif
 
 class ScLocal : public QObject
 {
@@ -77,8 +82,10 @@ private:
     void testTX();
 
     QTcpServer *server;
+#ifdef WIN32
     ScSocks5Server *socks5_server;
+#endif
     ScSetting *setting;
 };
 
-#endif // _LOCAL_H
+#endif // SC_LOCAL_H

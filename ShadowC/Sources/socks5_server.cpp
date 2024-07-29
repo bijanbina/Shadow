@@ -249,7 +249,7 @@ void ScSocks5Server::serverStream()
     if( remote_client->remote->isOpen() )
     {
         qDebug() << "remote_client->stream()";
-        remote_client->stream();
+        remote_client->writeBuf();
     }
     else
     {

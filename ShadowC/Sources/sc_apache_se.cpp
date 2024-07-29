@@ -1,6 +1,8 @@
 ﻿#include "sc_apache_se.h"
 
-ScApacheSe::ScApacheSe(QString name, QObject *parent): QObject(parent){
+ScApacheSe::ScApacheSe(QString name, QObject *parent):
+                       QObject(parent)
+{
     con_name = name; // for debug msg
     server = new QTcpServer;
     connect(server, SIGNAL(newConnection()),

@@ -1,7 +1,6 @@
 TEMPLATE = app
 
-QT += qml quick dbus core websockets
-QT += widgets
+QT += core network
 
 CONFIG += console
 
@@ -46,14 +45,15 @@ UI_DIR = Build/.ui
 
 HEADERS += \
     Sources/backend.h \
+    Sources/local.h \
+    Sources/remote_client.h \
+    Sources/sc_apache_se.h
+
+win32:HEADERS += \
     Sources/base64.h \
     Sources/crypto.h \
-    Sources/local.h \
     Sources/netutils.h \
     Sources/qaesencryption.h \
-    Sources/remote_client.h \
-    Sources/sc_apache_se \
-    Sources/sc_apache_se.h \
     Sources/shadowsocks.h \
     Sources/socks5.h \
     Sources/socks5_server.h \
@@ -62,16 +62,16 @@ HEADERS += \
     Sources/utils.h
 
 SOURCES += \
-    Sources/base64.cpp \
-    Sources/crypto.cpp \
     Sources/local.cpp \
     Sources/main.cpp \
+    Sources/remote_client.cpp \
+    Sources/sc_apache_se.cpp
+
+win32:SOURCES += \
+    Sources/base64.cpp \
+    Sources/crypto.cpp \
     Sources/netutils.cpp \
     Sources/qaesencryption.cpp \
-    Sources/remote_client.cpp \
-    Sources/sc_apache_se.cpp \
     Sources/socks5_server.cpp \
     Sources/stream.cpp \
     Sources/utils.cpp
-
-

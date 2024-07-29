@@ -21,7 +21,7 @@ ScLocal::ScLocal(ScSetting *st, QObject *parent):
     if( setting->is_server )
     {
         ScApacheSe server;
-        server().bind(setting->remote_port);
+        server.bind(setting->remote_port);
     }
     else
     {
@@ -50,8 +50,10 @@ void ScLocal::listenLocal()
 void ScLocal::connected()
 {
     qDebug() << "Server: Accepted connection";
+#ifdef WN32
     socks5_server = new ScSocks5Server(setting,
                         server->nextPendingConnection());
+#endif
 }
 
 void ScLocal::testTX()
