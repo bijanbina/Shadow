@@ -9,7 +9,7 @@ int main(int argc, char *argv[])
     app.setApplicationName("PolyBar");
 
     ScSetting *setting = new ScSetting();
-    setting->is_server   = 0;
+    setting->tx_count    = 0;
     setting->local_port  = 1088;
     setting->remote_port = 5512;
     setting->password    = "pass";
@@ -18,7 +18,8 @@ int main(int argc, char *argv[])
 
     if( argc>1 )
     {
-        setting->is_server = 1;
+        QString count = argv[1];
+        setting->tx_count = count.toInt();
     }
     ScLocal local(setting);
 

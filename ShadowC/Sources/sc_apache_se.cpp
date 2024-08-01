@@ -90,8 +90,7 @@ void ScApacheSe::readyRead(int id)
     QByteArray data_rx = cons[id]->readAll();
 
     read_bufs[id] += data_rx;
-    qDebug() << "readyRead::" << data_rx
-             << "read_bufs::" << read_bufs[id];
+    qDebug() << "read_bufs::" << read_bufs[id] << data_rx.length();
 }
 
 QByteArray ScApacheSe::processBuffer(int id)

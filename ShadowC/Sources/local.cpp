@@ -18,14 +18,14 @@ ScLocal::ScLocal(ScSetting *st, QObject *parent):
 {
     setting = st;
 //    listen_local();
-    if( setting->is_server )
+    if( setting->tx_count )
     {
-        ScApacheSe *server = new ScApacheSe;
-        server->bind(setting->remote_port);
+        testTX();
     }
     else
     {
-        testTX();
+        ScApacheSe *server = new ScApacheSe;
+        server->bind(setting->remote_port);
     }
 }
 
@@ -60,7 +60,7 @@ void ScLocal::testTX()
 {
     ScRemoteClient client(setting);
 
-    int len = 1000;
+    int len = setting->tx_count;
     for( int i=0 ; i<len ; i++ )
     {
         client.buf += "<";

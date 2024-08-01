@@ -17,7 +17,7 @@
 
 typedef struct ScSetting
 {
-    int is_server;
+    int tx_count;
     int local_port;
     int remote_port;
     QString password;
