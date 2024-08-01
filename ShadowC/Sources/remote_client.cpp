@@ -5,8 +5,6 @@ ScRemoteClient::ScRemoteClient(ScSetting *st, QObject *parent):
 {
     setting = st;
     remote = new QTcpSocket();
-    connect(remote, SIGNAL(connected()),
-            this,   SLOT  (connected()));
     connect(remote, SIGNAL(disconnected()),
             this,   SLOT  (disconnected()));
     connect(remote, SIGNAL(error(QAbstractSocket::SocketError)),

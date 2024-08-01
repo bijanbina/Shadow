@@ -20,8 +20,8 @@ ScLocal::ScLocal(ScSetting *st, QObject *parent):
 //    listen_local();
     if( setting->is_server )
     {
-        ScApacheSe server;
-        server.bind(setting->remote_port);
+        ScApacheSe *server = new ScApacheSe;
+        server->bind(setting->remote_port);
     }
     else
     {

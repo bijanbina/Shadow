@@ -152,11 +152,13 @@ void ScApacheSe::setupConnection(int con_id)
     if( con_id<ipv4.length() )
     { // put in free
         ipv4[con_id] = QHostAddress(ip_32);
+        read_bufs[con_id].clear();
         msg += " refereshing connection";
     }
     else
     {
         ipv4.push_back(QHostAddress(ip_32));
+        read_bufs.push_back(QByteArray());
         msg += " accept connection";
     }
     qDebug() << msg.toStdString().c_str() << con_id
